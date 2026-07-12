@@ -34,28 +34,38 @@ jobs:
       # `uses:` SHA-pin convention: see verify.yml header.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # pin: v4.3.1
 
-      # Install PowerShell 7.4 on the linux runner via Microsoft's apt
-      # repo. Decision: deliberately DON'T use the `microsoft/powershell@v1`
-      # Action here -- the upstream repo's @v1 ref behaves as a moving
-      # major-version branch that the GitHub Actions marketplace resolver
-      # intermittently fails to look up (manifests as
-      # `repository not found` at workflow-prep time, before scripts
-      # ever run). Replicating `apt-get install powershell` here removes
-      # that marketplace dependency entirely.
+      # Install PowerShell 7.4.6 on the linux runner via the official
+      # PowerShell release tarball. Decision tree:
+      #   * Don't use `microsoft/powershell@v1` Action -- the upstream
+      #     repo's v1 ref acts as a moving major-version branch that the
+      #     GitHub Actions marketplace resolver intermittently fails to
+      #     look up (manifests as `repository not found` at workflow-prep
+      #     time, before scripts ever run).
+      #   * Don't use `apt-get install powershell` (Microsoft's apt
+      #     repo) -- the packages-microsoft-prod.deb + transitive
+      #     dependency resolution is flaky on GitHub runners and
+      #     repeatedly fails in CI even when the install looks correct
+      #     in isolation.
+      #   * The tarball route is deterministic: the URL is content
+      #     addressed by its tag (v7.4.6) under github.com/PowerShell/
+      #     PowerShell/releases, the version is pinned, and no third-
+      #     party apt repo is involved. The 71.6 MB tarball will be
+      #     served once and can be cached via GitHub Actions
+      #     `actions/cache` if install time grows.
       #
-      # Runner + codename are pinned to ubuntu-22.04 so the codename in
-      # packages.microsoft.com/config/ubuntu/<codename>/ stays valid
-      # when GitHub rotates `ubuntu-latest` (Q4 2026 = 24.04 expected);
-      # if you bump, update both lines in lockstep.
-      - name: Install PowerShell 7.4 (apt; sidesteps microsoft/powershell@v1 marketplace ref)
+      # Tarball structure confirmed: files extract directly into the
+      # target dir (no top-level wrapper) -- verified empirically with
+      # `tar -tzf` on the v7.4.6 tag. So the symlink target is
+      # `/opt/powershell-7.4.6/pwsh`. Bump-the-version = bump both the
+      # dir name AND the symlink source in lockstep.
+      - name: Install PowerShell 7.4.6 (tarball; deterministic; sidesteps apt + Action marketplace)
         run: |
           set -e
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq wget
-          wget -q https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-          sudo dpkg -i packages-microsoft-prod.deb
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq powershell
+          curl -fsSL -o /tmp/pwsh7.tgz https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/powershell-7.4.6-linux-x64.tar.gz
+          sudo mkdir -p /opt/powershell-7.4.6
+          sudo tar -xzf /tmp/pwsh7.tgz -C /opt/powershell-7.4.6
+          sudo chmod +x /opt/powershell-7.4.6/pwsh
+          sudo ln -sf /opt/powershell-7.4.6/pwsh /usr/local/bin/pwsh
           pwsh -Version
 
       # Run the zero-dep PS smoke harness. Exit 0 = all pass.
