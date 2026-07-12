@@ -323,6 +323,63 @@ try {
   $dpStderrer = @($dpContent -split "`n" | Where-Object { $_ -match '^\s+-RedirectStandardError\s+\$\S+' }).Count
   Assert ($dpStdouter -eq 0) ('dev.ps1: no `-RedirectStandardOutput $var` parameter patterns (cmd.exe 2>&1 wrapper used): found ' + $dpStdouter + ' lines')
   Assert ($dpStderrer -eq 0) ('dev.ps1: no `-RedirectStandardError $var` parameter patterns (cmd.exe 2>&1 wrapper used): found ' + $dpStderrer + ' lines')
+
+  # The original Start-DevChild constructed ArgumentList as an array
+  # `'/c', $cmdLine`, which failed on the default Windows Node install
+  # path `C:\Program Files\nodejs\npm.cmd` (path splits at the space in
+  # "Program Files"). The fix wraps the body in `""` and uses /D /S /C
+  # + a single-string ArgumentList. The smoke regression guard below
+  # asserts the broken array form is gone.
+  $dpOldArrayC = @($dpContent -split "`n" | Where-Object { $_ -match "^\s*-ArgumentList\s+'/c'\s*,\s*\$cmdLine\b" }).Count
+  Assert ($dpOldArrayC -eq 0) ('dev.ps1: no array-form `ArgumentList /c, $cmdLine` (cmd.exe /D /S /C + single-string ArgumentList required for paths with spaces): found ' + $dpOldArrayC + ' lines')
+  # Single-quoted regex string: in PS, \" is NOT a valid escape inside a
+  # double-quoted string (the escape char is the backtick, and " is
+  # embedded via ""), so the earlier double-quoted form with `\"\"` parsed
+  # as: `\` literal + `"` closes the string + chokes on the rest. In a
+  # single-quoted string, `"` is literal (no escape needed) and `''` is
+  # the escape for one `'`. The content this resolves to is
+  # `^\s*\$cmdLine\s*=\s*'""'\s*\+`, which matches the dev.ps1 line
+  # `  $cmdLine = '""' + ...` (one `'` + two `"` + one `'`).
+  $dpWrap = @($dpContent -split "`n" | Where-Object { $_ -match '^\s*\$cmdLine\s*=\s*''""''\s*\+' }).Count
+  Assert ($dpWrap -ge 1) ('dev.ps1: $cmdLine wrapped with `""` outer quotes (cmd /C quote-stripping workaround for spaced exe paths): found ' + $dpWrap + ' lines')
+  # Single-quoted regex string (same idiom as $dpWrap above): avoids two
+  # pitfalls of the double-quoted form. (1) `\$cmdLine` in a double-quoted
+  # string interpolates the TEST-SCOPE $cmdLine variable, which is
+  # undefined here, so the resolved string loses the literal `$cmdLine`
+  # token and the regex would never match the dev.ps1 source as written.
+  # (2) `(` / `)` inside a double-quoted string confuse PowerShell's
+  # parser into "Too many )'s" warnings, even when they're regex-literal
+  # escaped parens. In a single-quoted string, `\$cmdLine` is the 9-char
+  # LITERAL `\$cmdLine` (regex `\$` matches a literal `$`; `cmdLine`
+  # matches the literal text), and `(` / `)` are inert. `''` is the
+  # escape for one `'`.
+  $dpSingleStr = @($dpContent -split "`n" | Where-Object { $_ -match '^\s*-ArgumentList\s+\(''/D\s*/S\s*/C\s*''\s*\+\s*\$cmdLine\)' }).Count
+  Assert ($dpSingleStr -ge 1) ('dev.ps1: present cmd.exe /D /S /C + single-string ArgumentList wrap: found ' + $dpSingleStr + ' lines')
+
+  # Live round-trip guard for the Codex P1: actually invoke cmd /D /S /C
+  # with a wrapped body, and verify a spaced path token survives cmd's
+  # parser end-to-end. We use `echo` (a cmd builtin) with a forward-
+  # slash path that contains a space:
+  #   - echo is a deterministic cmd builtin on every Windows host (the
+  #     prior version tried to execute a non-existent exe, but cmd's
+  #     "The system cannot find the path specified." error does NOT
+  #     include the path, so the IndexOf check would fail).
+  #   - forward slashes sidestep cmd's backslash-handling quirk: on
+  #     this host, echo of `C:\Program Files\TEST_MARKER` returns
+  #     `C:\Program FilesTEST_MARKER` (a single backslash is eaten
+  #     between two word chars). Forward slashes are accepted by cmd
+  #     on Windows and don't have the same quirk.
+  # What this proves: (1) PS's Start-Process single-string ArgumentList
+  # correctly passes the wrap+body to cmd's CreateProcess layer, (2)
+  # /D /S /C deterministically strips the first and last quote (the
+  # wrap), (3) the inner spaced path survives the strip and is emitted
+  # by echo as-is. Gated to Windows because cmd.exe is Windows-only.
+  if ($_isWin) {
+    $liveCmdLine = '""' + 'echo C:/Program Files/TEST_MARKER' + '""'
+    $liveOut = cmd /D /S /C $liveCmdLine 2>&1
+    $liveJ = ($liveOut -join "`n")
+    Assert ($liveJ.IndexOf('Program Files/TEST_MARKER') -ge 0) ('dev.ps1 P1 fix (Codex): cmd /D /S /C + wrap preserves spaced exe path end-to-end (live round-trip); got: ' + $liveJ.Trim())
+  }
 }
 finally {
   if (Test-Path -LiteralPath $tmpRoot) {

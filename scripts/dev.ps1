@@ -229,22 +229,25 @@ function Start-DevChild {
   # Same reasoning the bash twin relies on with `kill -TERM -${pgid}` on
   # the session-leader.
   #
-  # Same merged-log-file semantic as the bash twin: both stdout and
-  # stderr land in $logPath, so `tail -f $env:TEMP/remotion-dev-*.log`
-  # from another terminal or the in-loop Start-LogTailer tailer both
-  # surface every line. PowerShell's auto-quoting of the embedded quoted
-  # paths in $cmdLine is harmless: cmd.exe's tokenizer strips the outer
-  # quotes after reconstructing argv.
-  #
-  # Note on file existence: $logPath is removed at function entry above
-  # the Start-Process call so cmd.exe's `>` truncation is a clean open
-  # (`> file` truncates). PS-side auto-quoting of paths with spaces
-  # (e.g. `C:\Program Files\nodejs\npm.cmd`) is handled correctly because
-  # the embedded `"` in $cmdLine becomes `\"` at the CreateProcess
-  # layer, which cmd.exe unescapes back to `"` during parsing.
-  $cmdLine = "`"$npmExePath`" run dev > `"$logPath`" 2>&1"
+  # cmd.exe /C quote-stripping workaround for paths with spaces: the
+  # default Node install path is `C:\Program Files\nodejs\npm.cmd` on
+  # Windows, which contains a space. cmd.exe's /C parser applies a
+  # historical quote-stripping rule (when EXACTLY 2 quote chars are
+  # present, treat the body as a single quoted command; otherwise,
+  # strip the leading + trailing quote char). With 4 quote chars in
+  # `$cmdLine` (2 around `$npmExePath`, 2 around `$logPath`) and
+  # Start-Process's array ArgumentList joining without protective outer
+  # quotes, the path split at "Program Files" and dev.ps1 failed to
+  # launch npm. The fix: (1) wrap the body in `""` (a literal doubled
+  # quote pair, so the strip rule pairs the wrap and the inner is
+  # preserved as-is), and (2) pass `/D /S /C` so cmd's /S rule keeps
+  # all quote chars literally, and (3) pass -ArgumentList as a SINGLE
+  # string (not an array) so PowerShell doesn't auto-escape inner `"`
+  # as `\"` and confuse the parser. See Microsoft docs on cmd.exe /C /S
+  # for the full grammar this relies on.
+  $cmdLine = '""' + '"' + $npmExePath + '" run dev > "' + $logPath + '" 2>&1' + '""'
   $proc = Start-Process -FilePath 'cmd.exe' `
-    -ArgumentList '/c', $cmdLine `
+    -ArgumentList ('/D /S /C ' + $cmdLine) `
     -WorkingDirectory $WorkDir `
     -PassThru
   Write-Host "[dev.ps1] Starting $Label (port $Port) pid=$($proc.Id) in $WorkDir ..."
