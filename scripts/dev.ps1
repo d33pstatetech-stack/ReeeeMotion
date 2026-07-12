@@ -213,11 +213,42 @@ function Start-DevChild {
   $logPath = Join-Path $env:TEMP $logName
   if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
 
-  $proc = Start-Process -FilePath $npmExePath `
-    -ArgumentList 'run','dev' `
+  # Start-Process quirk this works around: PowerShell rejects `Start-Process`
+  # with `InvalidOperationException: ... 'RedirectStandardOutput' and
+  # 'RedirectStandardError' are same ...` whenever both stdout and stderr
+  # point at the same file. There is no native PowerShell analogue to
+  # bash's `> $log 2>&1` -- so we detour through
+  # `cmd.exe /c "<npm> run dev > $log 2>&1"`. `cmd.exe`'s own shell parser
+  # merges the streams BEFORE Start-Process's redirection layer is
+  # involved, satisfying the constraint trivially (we don't pass any
+  # -RedirectStandard* parameters here at all).
+  #
+  # Captured PID is `cmd.exe`'s, not `npm.cmd`'s, but cleanup still works
+  # because `taskkill /F /T /PID $ServerPid` walks the WHOLE job-object
+  # tree (cmd.exe -> npm.cmd -> node.exe -> tsx/vite children) atomically.
+  # Same reasoning the bash twin relies on with `kill -TERM -${pgid}` on
+  # the session-leader.
+  #
+  # cmd.exe /C quote-stripping workaround for paths with spaces: the
+  # default Node install path is `C:\Program Files\nodejs\npm.cmd` on
+  # Windows, which contains a space. cmd.exe's /C parser applies a
+  # historical quote-stripping rule (when EXACTLY 2 quote chars are
+  # present, treat the body as a single quoted command; otherwise,
+  # strip the leading + trailing quote char). With 4 quote chars in
+  # `$cmdLine` (2 around `$npmExePath`, 2 around `$logPath`) and
+  # Start-Process's array ArgumentList joining without protective outer
+  # quotes, the path split at "Program Files" and dev.ps1 failed to
+  # launch npm. The fix: (1) wrap the body in `""` (a literal doubled
+  # quote pair, so the strip rule pairs the wrap and the inner is
+  # preserved as-is), and (2) pass `/D /S /C` so cmd's /S rule keeps
+  # all quote chars literally, and (3) pass -ArgumentList as a SINGLE
+  # string (not an array) so PowerShell doesn't auto-escape inner `"`
+  # as `\"` and confuse the parser. See Microsoft docs on cmd.exe /C /S
+  # for the full grammar this relies on.
+  $cmdLine = '""' + '"' + $npmExePath + '" run dev > "' + $logPath + '" 2>&1' + '""'
+  $proc = Start-Process -FilePath 'cmd.exe' `
+    -ArgumentList ('/D /S /C ' + $cmdLine) `
     -WorkingDirectory $WorkDir `
-    -RedirectStandardOutput $logPath `
-    -RedirectStandardError $logPath `
     -PassThru
   Write-Host "[dev.ps1] Starting $Label (port $Port) pid=$($proc.Id) in $WorkDir ..."
   return @{ pid = $proc.Id; logPath = $logPath; label = $Label; port = $Port }

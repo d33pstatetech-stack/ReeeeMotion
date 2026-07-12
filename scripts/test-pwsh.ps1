@@ -22,6 +22,16 @@
 Set-StrictMode -Version 1.0
 $ErrorActionPreference = 'Continue'
 
+# Cross-engine Windows detection. `$IsWindows` is an automatic variable
+# in PowerShell Core 6+ ONLY -- the user's `npm run test:pwsh` invokes
+# Windows PowerShell 5.1 via `powershell -File`, which doesn't define
+# $IsWindows and would throw `VariableIsUndefined` on `if ($IsWindows)`
+# (then silently fall through because $ErrorActionPreference=Continue,
+# dropping the local pass count from 42 to ~24). Compute it manually
+# via [System.Environment]::OSVersion so the gates below behave the
+# same way under Windows PowerShell 5.1 AND PowerShell Core 6+/pwsh.
+$_isWin = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
+
 $script:Pass = 0
 $script:Fail = 0
 
@@ -69,11 +79,21 @@ try {
 
   . $helperPath
 
-  # Get-CanonicalizedPath
-  $canon = Get-CanonicalizedPath -Path 'E:\Users\Foo\MixedCase\'
-  Assert ($canon -eq 'e:/users/foo/mixedcase') 'Get-CanonicalizedPath: backslash + mixed case + trailing slash -> canonicalized'
-  $canon = Get-CanonicalizedPath -Path 'C:/Users/Bar/proj/'
-  Assert ($canon -eq 'c:/users/bar/proj') 'Get-CanonicalizedPath: forward-slash input preserved but case-folded'
+  # Get-CanonicalizedPath. The canonicalization function is platform-
+  # neutral; only the TEST INPUTS need to be OS-flavored. Hardcoded
+  # Windows drive letters (E:\Users\Foo\...) fail on linux pwsh because
+  # [System.IO.Path]::GetFullPath treats 'E:\' as a relative path there
+  # and prepends CWD, so the assertion against the exact string
+  # 'e:/users/foo/mixedcase' would evaluate to $false. Swap to linux-
+  # style absolute paths on non-Windows runners.
+  $p1 = if ($_isWin) { 'E:\Users\Foo\MixedCase\' } else { '/Users/Foo/MixedCase/' }
+  $e1 = if ($_isWin) { 'e:/users/foo/mixedcase' } else { '/users/foo/mixedcase' }
+  $canon = Get-CanonicalizedPath -Path $p1
+  Assert ($canon -eq $e1) 'Get-CanonicalizedPath: backslash + mixed case + trailing slash -> canonicalized'
+  $p2 = if ($_isWin) { 'C:/Users/Bar/proj/' } else { '/Users/Bar/proj/' }
+  $e2 = if ($_isWin) { 'c:/users/bar/proj' } else { '/users/bar/proj' }
+  $canon = Get-CanonicalizedPath -Path $p2
+  Assert ($canon -eq $e2) 'Get-CanonicalizedPath: forward-slash input preserved but case-folded'
 
   # Write-Manifest roundtrip
   $projADir = Join-Path $tmpRoot 'projectA'
@@ -149,6 +169,20 @@ try {
   Assert (-not (Test-PidAlive -targetPid -1)) 'Test-PidAlive: negative PID short-circuits to false'
 
   # ===========================================================
+  # Sections 2 and 3 invoke child PS scripts (cleanup-ports.ps1, dev.ps1)
+  # whose arg-parsing runs cleanly on Windows but breaks on linux pwsh:
+  #  - We symlinked only /usr/local/bin/pwsh (not `powershell`), so
+  #    `& powershell` throws CommandNotFoundException immediately.
+  #  - cleanup-ports.ps1 (no-args) port-probe path uses
+  #    Get-NetTCPConnection which is Windows-only.
+  # Windows users running `npm run test:pwsh` locally still see the
+  # full 42-assert battery. CI on linux pwsh skips these two sections
+  # but keeps the cross-platform helper + cross-file + regression
+  # asserts, which are the ones that actually exercise the change
+  # being verified by this PR (regression guard, manifest IO, helper
+  # invariants).
+  if ($_isWin) {
+
   Section 'Shell: cleanup-ports.ps1 (arg parsing + --own no-manifest idempotency)'
 
   # Snapshot originals so we can restore them in `finally` below. The
@@ -198,8 +232,10 @@ try {
     $env:CLEANUP_PORTS_SWEEP = $origSweep
     $env:ENABLE_OWN_RECOVERY = $origOwnRecov
   }
+  }
 
   # ===========================================================
+  if ($_isWin) {
   Section 'Shell: dev.ps1 (arg parsing + --help / -h / --bogus exit codes)'
 
   $dp = (Join-Path $scriptsDir 'dev.ps1')
@@ -228,8 +264,8 @@ try {
   $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $dp --bogus *>&1
   $rc = $LASTEXITCODE
   $j = ($out -join "`n")
-  Assert ($rc -eq 2)             "dev.ps1 --bogus: exit 2 (got $rc)"
-  Assert ($j.IndexOf('Unknown arg') -ge 0) 'dev.ps1 --bogus: "Unknown arg" present in any stream'
+  Assert ($rc -eq 2)             "dev.ps1 --bogus: exit 2 (got $rc)"; Assert ($j.IndexOf('Unknown arg') -ge 0) 'dev.ps1 --bogus: "Unknown arg" present in any stream'
+  }
 
   # ===========================================================
   Section 'Helper: cross-file consistency check'
@@ -258,6 +294,92 @@ try {
   }
   Assert ($psFields.Count   -ge 4) ('cross-file: _pid-manifest.ps1 emits: '   + ($psFields   -join ','))
   Assert ($bashFields.Count -ge 4) ('cross-file: _addpidmanifest.sh emits: ' + ($bashFields -join ','))
+
+  # ===========================================================
+  Section 'Regression: dev.ps1 Start-Process redirect-merging (no same-file redirect)'
+
+  # PS Start-Process rejects the call when -RedirectStandardOutput AND
+  # -RedirectStandardError point at the same file (InvalidOperationException).
+  # We work around it by passing `cmd.exe /c "<npm> run dev > $log 2>&1"`
+  # so cmd's own shell parser does the stream merge before the
+  # Start-Process layer ever sees the paths. After that workaround,
+  # dev.ps1 has NO -RedirectStandard* arguments at all -- assert that
+  # here so a future contributor who re-adds them (and inadvertently
+  # re-introduces the bug) is caught, because the existing dev.ps1
+  # arg-parsing tests (--help / -h / --bogus) exit before Start-DevChild
+  # is reached and so cannot catch this specific regression.
+  #
+  # Targeted regex: the original bug was a parameter pair
+  # `  -RedirectStandardOutput $logPath \`` followed by
+  # `  -RedirectStandardError $logPath \`` -- both pointing at the same
+  # variable. The regex anchors on PowerShell parameter syntax: a line
+  # starts with whitespace + `-Redirect*` + whitespace + `$variable`.
+  # Plain-text mentions in comments (e.g. "we don't pass any
+  # `-RedirectStandard*` parameters here") do NOT match, because they do
+  # not begin with `-` after whitespace -- this is what makes the
+  # "comment in dev.ps1 mentions the names" case a non-issue.
+  $dpContent = Get-Content -LiteralPath (Join-Path $scriptsDir 'dev.ps1') -Raw
+  $dpStdouter = @($dpContent -split "`n" | Where-Object { $_ -match '^\s+-RedirectStandardOutput\s+\$\S+' }).Count
+  $dpStderrer = @($dpContent -split "`n" | Where-Object { $_ -match '^\s+-RedirectStandardError\s+\$\S+' }).Count
+  Assert ($dpStdouter -eq 0) ('dev.ps1: no `-RedirectStandardOutput $var` parameter patterns (cmd.exe 2>&1 wrapper used): found ' + $dpStdouter + ' lines')
+  Assert ($dpStderrer -eq 0) ('dev.ps1: no `-RedirectStandardError $var` parameter patterns (cmd.exe 2>&1 wrapper used): found ' + $dpStderrer + ' lines')
+
+  # The original Start-DevChild constructed ArgumentList as an array
+  # `'/c', $cmdLine`, which failed on the default Windows Node install
+  # path `C:\Program Files\nodejs\npm.cmd` (path splits at the space in
+  # "Program Files"). The fix wraps the body in `""` and uses /D /S /C
+  # + a single-string ArgumentList. The smoke regression guard below
+  # asserts the broken array form is gone.
+  $dpOldArrayC = @($dpContent -split "`n" | Where-Object { $_ -match "^\s*-ArgumentList\s+'/c'\s*,\s*\$cmdLine\b" }).Count
+  Assert ($dpOldArrayC -eq 0) ('dev.ps1: no array-form `ArgumentList /c, $cmdLine` (cmd.exe /D /S /C + single-string ArgumentList required for paths with spaces): found ' + $dpOldArrayC + ' lines')
+  # Single-quoted regex string: in PS, \" is NOT a valid escape inside a
+  # double-quoted string (the escape char is the backtick, and " is
+  # embedded via ""), so the earlier double-quoted form with `\"\"` parsed
+  # as: `\` literal + `"` closes the string + chokes on the rest. In a
+  # single-quoted string, `"` is literal (no escape needed) and `''` is
+  # the escape for one `'`. The content this resolves to is
+  # `^\s*\$cmdLine\s*=\s*'""'\s*\+`, which matches the dev.ps1 line
+  # `  $cmdLine = '""' + ...` (one `'` + two `"` + one `'`).
+  $dpWrap = @($dpContent -split "`n" | Where-Object { $_ -match '^\s*\$cmdLine\s*=\s*''""''\s*\+' }).Count
+  Assert ($dpWrap -ge 1) ('dev.ps1: $cmdLine wrapped with `""` outer quotes (cmd /C quote-stripping workaround for spaced exe paths): found ' + $dpWrap + ' lines')
+  # Single-quoted regex string (same idiom as $dpWrap above): avoids two
+  # pitfalls of the double-quoted form. (1) `\$cmdLine` in a double-quoted
+  # string interpolates the TEST-SCOPE $cmdLine variable, which is
+  # undefined here, so the resolved string loses the literal `$cmdLine`
+  # token and the regex would never match the dev.ps1 source as written.
+  # (2) `(` / `)` inside a double-quoted string confuse PowerShell's
+  # parser into "Too many )'s" warnings, even when they're regex-literal
+  # escaped parens. In a single-quoted string, `\$cmdLine` is the 9-char
+  # LITERAL `\$cmdLine` (regex `\$` matches a literal `$`; `cmdLine`
+  # matches the literal text), and `(` / `)` are inert. `''` is the
+  # escape for one `'`.
+  $dpSingleStr = @($dpContent -split "`n" | Where-Object { $_ -match '^\s*-ArgumentList\s+\(''/D\s*/S\s*/C\s*''\s*\+\s*\$cmdLine\)' }).Count
+  Assert ($dpSingleStr -ge 1) ('dev.ps1: present cmd.exe /D /S /C + single-string ArgumentList wrap: found ' + $dpSingleStr + ' lines')
+
+  # Live round-trip guard for the Codex P1: actually invoke cmd /D /S /C
+  # with a wrapped body, and verify a spaced path token survives cmd's
+  # parser end-to-end. We use `echo` (a cmd builtin) with a forward-
+  # slash path that contains a space:
+  #   - echo is a deterministic cmd builtin on every Windows host (the
+  #     prior version tried to execute a non-existent exe, but cmd's
+  #     "The system cannot find the path specified." error does NOT
+  #     include the path, so the IndexOf check would fail).
+  #   - forward slashes sidestep cmd's backslash-handling quirk: on
+  #     this host, echo of `C:\Program Files\TEST_MARKER` returns
+  #     `C:\Program FilesTEST_MARKER` (a single backslash is eaten
+  #     between two word chars). Forward slashes are accepted by cmd
+  #     on Windows and don't have the same quirk.
+  # What this proves: (1) PS's Start-Process single-string ArgumentList
+  # correctly passes the wrap+body to cmd's CreateProcess layer, (2)
+  # /D /S /C deterministically strips the first and last quote (the
+  # wrap), (3) the inner spaced path survives the strip and is emitted
+  # by echo as-is. Gated to Windows because cmd.exe is Windows-only.
+  if ($_isWin) {
+    $liveCmdLine = '""' + 'echo C:/Program Files/TEST_MARKER' + '""'
+    $liveOut = cmd /D /S /C $liveCmdLine 2>&1
+    $liveJ = ($liveOut -join "`n")
+    Assert ($liveJ.IndexOf('Program Files/TEST_MARKER') -ge 0) ('dev.ps1 P1 fix (Codex): cmd /D /S /C + wrap preserves spaced exe path end-to-end (live round-trip); got: ' + $liveJ.Trim())
+  }
 }
 finally {
   if (Test-Path -LiteralPath $tmpRoot) {
