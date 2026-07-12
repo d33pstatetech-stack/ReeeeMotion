@@ -1,0 +1,79 @@
+# =============================================================================
+# .gitignore -- repo-root ignore patterns.
+#
+# This file did NOT exist before this turn. We create it now to keep the
+# three new persistent artifacts OUT of the repo:
+#   * .dev/launch-manifest.json (written by scripts/dev.sh + read by --own)
+#   * dist-electron/            (electron-builder packaging output)
+#   * .electron-builder-cache/  (electron-builder download cache)
+#
+# We mirror most of .dockerignore here, but keep .gitignore tighter because
+# git-tracked files leak into CI / dev checkouts permanently.
+# =============================================================================
+
+# ---------- Dev-stack ownership (FOLLOWUP #1, --own) ----------------------
+# The launch manifest records the PIDs of this project's started dev
+# stack so a follow-up wrapper invocation can recover ONLY those.
+# Per-machine state, NEVER committed.
+.dev/
+*.dev-manifest.json
+
+# ---------- Electron-builder packaging (FOLLOWUP #3) ----------------------
+# Build outputs (cross-platform installers, AppImage squashfs, dmg bundle).
+# 80-700 MB per platform; we don't want these in `git status` or pushed.
+dist-electron/
+.electron-builder-cache/
+
+# ---------- dependencies ------------------------------------------------
+# Per-package lockfiles are committed but node_modules are huge and
+# recreate-able per-platform.
+node_modules/
+client/node_modules/
+server/node_modules/
+compositions/node_modules/
+
+# ---------- build outputs ----------------------------------------------
+# Each workspace's tsc/vite/tsup output.
+dist/
+build/
+*.tsbuildinfo
+.tsbuildinfo
+*.map
+
+# ---------- Vite cache --------------------------------------------------
+# Recreated on every dev start. Recompute-on-branch-switch cost is low.
+.vite/
+node_modules/.vite/
+
+# ---------- editor + OS noise -----------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# ---------- secrets ----------------------------------------------------
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ---------- logs --------------------------------------------------------
+# /tmp/dev-server.{PID}.log goes to OS temp, not the repo. Anything in
+# /tmp shouldn't reach here, but a stray `npm run dev > log.txt` from
+# someone doing manual debugging should still be ignored.
+*.log
+
+# ---------- git + github -----------------------------------------------
+.git/
+
+# ---------- Docker / CI config itself ---------------------------------
+.dockerignore
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+docker-compose.*.yml
+.github/
+verify.mjs

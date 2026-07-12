@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Remotion Editor
+GenericName=Video Editor (dev stack)
+Comment=Local dev launcher for the Remotion Video Editor
+Exec=bash E:/noobdenial/Documents/Web Projects 2025/remotion/start.sh %u
+Icon=E:/noobdenial/Documents/Web Projects 2025/remotion/scripts/icons/out/remotion-editor-256.png
+Terminal=true
+Categories=Development;AudioVideo;VideoEditor;
+StartupNotify=true
+StartupWMClass=Remotion Editor
+Keywords=video;editor;remotion;timeline;remix;

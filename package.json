@@ -1,0 +1,49 @@
+{
+  "name": "remotion-editor-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo root for the Remotion video editor. Each package (client, compositions, server) has its own scripts; this root script fans them out in parallel so a single `npm run verify` surfaces every failure in one shot.",
+  "main": "electron/main.js",
+  "scripts": {
+    "verify": "node verify.mjs",
+    "verify:seq": "PARALLEL=false node verify.mjs",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --version || (cd client && npm run typecheck) && (cd server && npm run typecheck)",
+    "test": "cd client && npm test",
+    "test:pwsh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-pwsh.ps1",
+    "verify:pwsh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-pwsh.ps1",
+    "release-notes": "node scripts/release-notes.mjs",
+    "dev:all": "bash scripts/dev.sh",
+    "smoke": "bash scripts/test-stack.sh",
+    "cleanup:ports": "bash scripts/cleanup-ports.sh",
+    "cleanup:ports:own": "bash scripts/cleanup-ports.sh --own",
+    "cleanup:ports:sweep": "bash scripts/cleanup-ports.sh --sweep",
+    "cleanup:ports:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cleanup-ports.ps1",
+    "cleanup:ports:own:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cleanup-ports.ps1 --own",
+    "cleanup:ports:sweep:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cleanup-ports.ps1 --sweep",
+    "dev:all:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "smoke:export": "bash scripts/smoke-export.sh",
+    "icons:build": "python3 scripts/icons/build-icons.py",
+    "icons:check": "python3 scripts/icons/build-icons.py --check",
+    "icons:clean": "python3 scripts/icons/build-icons.py --clean",
+    "electron:start": "electron .",
+    "electron:dev-tools": "REMOTION_EDITOR_DEVTOOLS=1 electron .",
+    "electron:dist": "electron-builder",
+    "electron:dist:win": "electron-builder --win --x64",
+    "electron:dist:mac": "electron-builder --mac",
+    "electron:dist:linux": "electron-builder --linux --x64"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "extends": null,
+    "appId": "dev.remotion.editor",
+    "productName": "Remotion Editor"
+  },
+  "workspaces": [
+    "client",
+    "server",
+    "compositions"
+  ]
+}

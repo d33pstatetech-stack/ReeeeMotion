@@ -1,0 +1,23 @@
+{
+  "_note": "This tsconfig is intended to be typechecked transitively via the client (which imports from `compositions/*`) and the server (which bundles compositions at render-time). Running `npm run build` here in isolation will fail until you `npm install` inside this directory so react + remotion + their types are available. The root verify script does NOT typecheck compositions standalone; it relies on the client + server compile paths to catch type errors in shared types.",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "compositions/*": ["./src/*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

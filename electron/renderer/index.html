@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remotion Editor — dev stack</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">
+      <!-- Inline SVG mark -- same color palette + motif as scripts/icons/out/*
+           so the window brand matches the OS desktop icon. The mark is
+           rendered Crisp via currentColor so a future theme-switch can
+           invert it without touching the markup. -->
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0"   stop-color="#312E81"/>
+            <stop offset="1"   stop-color="#06B6D4"/>
+          </linearGradient>
+        </defs>
+        <rect x="6" y="6" width="52" height="52" rx="10" fill="url(#g)"/>
+        <circle cx="32" cy="34" r="14" fill="#ffffff"/>
+        <polygon points="26,26 26,42 40,34" fill="#312E81"/>
+        <rect x="44" y="22" width="3" height="20" fill="#ffffff"/>
+        <rect x="44" y="22" width="6" height="6" fill="#06B6D4"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Remotion Editor</h1>
+        <p class="subtitle">Local dev stack</p>
+      </div>
+    </div>
+    <div class="status-pill grey" id="status" aria-live="polite" data-status="idle">
+      <span class="dot"></span>
+      <span id="status-label">idle</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="actions">
+      <button id="start-btn" class="primary" type="button">
+        <span class="btn-icon">▶</span>
+        Start stack
+      </button>
+      <button id="stop-btn" class="danger" type="button" disabled>
+        <span class="btn-icon">■</span>
+        Stop stack
+      </button>
+      <button id="open-btn" class="secondary" type="button" disabled>
+        <span class="btn-icon">↗</span>
+        Open browser
+      </button>
+    </section>
+
+    <section class="log-pane">
+      <div class="log-header">
+        <span class="log-title">Live logs</span>
+        <button id="clear-log-btn" class="ghost" type="button" aria-label="Clear log">clear</button>
+      </div>
+      <pre id="log" aria-label="dev-stack log output"></pre>
+    </section>
+  </main>
+
+  <footer class="status-bar">
+    <span id="footer-line">Ready</span>
+    <span class="sep">·</span>
+    <span>Ctrl-C equivalent: Stop stack button</span>
+  </footer>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

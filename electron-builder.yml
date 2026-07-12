@@ -1,0 +1,126 @@
+# =============================================================================
+# electron-builder.yml -- packaging config for the Remotion Editor GUI launcher.
+#
+# Build outputs land in ./dist-electron/ (gitignored). Run via:
+#   npm run electron:start      # run from source (development)
+#   npm run electron:dist       # build the platform-native installer(s)
+#
+# Cross-platform build matrix:
+#   * Windows  : NSIS installer (.exe)         -- signature via CSC_LINK/CSC_KEY_PASSWORD
+#   * macOS    : DMG (.dmg)                    -- notarization via APPLE_ID* + CSC_*
+#   * Linux    : AppImage (.AppImage)          -- unsigned by convention
+#
+# Subset build for a specific target:
+#   npm run electron:dist -- --win             # Windows installer only (current OS must support)
+#   npm run electron:dist -- --mac
+#   npm run electron:dist -- --linux
+#   npm run electron:dist -- --win --x64
+#
+# V1 is UNSIGNED by default. For production distribution, supply the env
+# vars documented in README_GUI_LAUNCHER.md ("Optional: install the
+# packaged Electron launcher" -- Code-signing subsection).
+# =============================================================================
+
+appId: dev.remotion.editor
+productName: Remotion Editor
+copyright: Copyright (c) 2025
+artifactName: ${productName}-${version}-${arch}.${ext}
+
+# Bundle ONLY what's necessary. node_modules from client + server are
+# NOT bundled -- the Electron app uses spawn() to launch scripts/dev.sh
+# which independently runs `npm run dev` in server/ and client/. This
+# makes the actual install much smaller (~80 MB instead of ~700 MB) and
+# lets the dev stack rebuild without re-packaging the launcher.
+files:
+  - electron/**/*
+  - scripts/**/*
+  - scripts/**/**  # catch nested scripts/icons/ etc.
+  - package.json
+  - "!**/.git"
+  - "!**/.DS_Store"
+  - "!**/*.md.bak"
+  - "!**/.dev/launch-manifest.json"
+  - "!**/dist-electron/**"
+  - "!**/node_modules"
+  - "!**/__pycache__"
+  - "!**/*.pyc"
+
+# Bundle the scripts/ tree as runtime resources so scripts/dev.sh and
+# scripts/icons/out/ land next to the .exe on install (Windows NSIS
+# layout, .dmg contents, AppImage squashfs).
+extraResources:
+  - from: scripts
+    to: scripts
+    filter:
+      - "**/*"
+
+asar: true
+asarUnpack:
+  - scripts/dev.sh
+  - scripts/_pid-tree-walk.sh
+  - scripts/_addpidmanifest.sh
+  - scripts/cleanup-ports.sh
+
+directories:
+  output: dist-electron
+  buildResources: scripts/icons/out
+
+# ---------- Windows ----------------------------------------------------------
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: scripts/icons/out/remotion-editor.ico
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  publisherName: Remotion Editor (dev)
+  verifyUpdateCodeSignature: false   # V1 is unsigned; flip to true once keys exist
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Remotion Editor
+  uninstallDisplayName: Remotion Editor (dev stack)
+  deleteAppDataOnUninstall: true
+  # No custom NSIS hooks in V1. To customize (e.g., register a file
+  # extension), commit a `scripts/electron-builder/installer.nsh` and
+  # add `include: scripts/electron-builder/installer.nsh` here.
+
+# ---------- macOS ------------------------------------------------------------
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: scripts/icons/out/remotion-editor.icns
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false   # V1 is unsigned; user right-clicks → Open
+  artifactName: ${productName}-${version}-${arch}.${ext}
+dmg:
+  writeUpdateInfo: false
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ---------- Linux ------------------------------------------------------------
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: scripts/icons/out/remotion-editor-256.png
+  category: AudioVideo
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  synopsis: Local dev launcher for the Remotion Video Editor
+  description: One-click launcher that boots the Remotion Video Editor dev stack (Express server on :3001 + Vite client on :5173) and opens it in your default browser. Ctrl-C cleanly stops the whole stack.
+
+# ---------- Publish (no-op in V1) ------------------------------------------
+# We don't auto-publish to GitHub Releases / S3 in V1. The installer
+# outputs in ./dist-electron/ are the artifact; copy them to a release
+# target manually (or extend this block to wire them up).
+publish: null

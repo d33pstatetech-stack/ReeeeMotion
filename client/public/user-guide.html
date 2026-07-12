@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remotion Video Editor — User Guide</title>
+<meta name="description" content="A user guide for the Remotion Video Editor — uploading media, editing on a 3-lane timeline, transitions, springs, exporting MP4, plus a glossary of video, AI, and design terms.">
+<style>
+  /* ================================================================
+     Theme tokens — match the dark-violet palette of the editor app
+     ================================================================ */
+  :root {
+    --bg-page:    #0b0d12;
+    --bg-card:    #11141b;
+    --bg-tinted:  #161922;
+    --bg-elev:    #1c2030;
+    --border:     rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.16);
+    --text:       #e6e8ee;
+    --text-dim:   #a1a8b8;
+    --text-muted: #6b7388;
+    --violet:     #a78bfa;
+    --violet-deep:#8b5cf6;
+    --indigo:     #818cf8;
+    --cyan:       #22d3ee;
+    --emerald:    #34d399;
+    --amber:      #fbbf24;
+    --rose:       #fb7185;
+    --pink:       #f472b6;
+    --code-bg:    #0d1018;
+    --shadow-card: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 600px at 80% -10%, rgba(139,92,246,0.10), transparent 60%),
+      radial-gradient(900px 500px at 0% 100%, rgba(34,211,238,0.06), transparent 60%),
+      var(--bg-page);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Grid paper background behind the content for a "studio" feel */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1;
+    background: repeating-conic-gradient(#0f121a 0% 25%, #0b0d12 0% 50%) 0 0 / 36px 36px;
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  a { color: var(--violet); text-decoration: none; border-bottom: 1px dotted rgba(167,139,250,0.4); }
+  a:hover { border-bottom-color: var(--violet); }
+  code, kbd, .mono { font-family: ui-monospace, "JetBrains Mono", "SF Mono", "Menlo", Consolas, monospace; }
+  kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* ================================================================
+     Layout
+     ================================================================ */
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  /* ================================================================
+     Hero
+     ================================================================ */
+  .hero {
+    padding: 80px 0 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(139,92,246,0.14);
+    color: var(--violet);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    margin: 0 0 12px;
+    font-size: 44px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #fff 0%, #c4b5fd 40%, #67e8f9 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero .tagline {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-dim);
+    max-width: 700px;
+  }
+  .hero .meta {
+    margin-top: 24px;
+    display: flex; flex-wrap: wrap; gap: 8px 16px;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .hero .meta span { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ================================================================
+     Table of contents
+     ================================================================ */
+  .toc-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: linear-gradient(180deg, rgba(11,13,18,0.96), rgba(11,13,18,0.85));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 0;
+  }
+  .toc-wrap .title {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .toc {
+    columns: 2;
+    column-gap: 24px;
+    list-style: none;
+    padding: 0; margin: 0;
+    counter-reset: toc;
+  }
+  .toc li {
+    counter-increment: toc;
+    break-inside: avoid;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .toc a {
+    display: flex; align-items: baseline; gap: 8px;
+    color: var(--text-dim);
+    border-bottom: none;
+    padding: 3px 0;
+  }
+  .toc a::before {
+    content: counter(toc, decimal-leading-zero);
+    color: var(--violet);
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    min-width: 22px;
+  }
+  .toc a:hover { color: var(--text); }
+  .toc .group-head {
+    margin-top: 10px; margin-bottom: 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    list-style: none;
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 640px) {
+    .toc { columns: 1; }
+    .hero h1 { font-size: 32px; }
+  }
+
+  /* ================================================================
+     Sections
+     ================================================================ */
+  main { padding: 60px 0; }
+  section { margin: 0 0 64px; }
+  section > h2 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    scroll-margin-top: 110px;
+    position: relative;
+  }
+  section > h2 .num {
+    display: block;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  /* Hover-anchor icon that copies deep link on click */
+  section > h2 .anchor {
+    margin-left: 8px;
+    color: var(--text-muted);
+    font-size: 18px;
+    border-bottom: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    vertical-align: middle;
+  }
+  section > h2:hover .anchor,
+  section > h2:focus-within .anchor { opacity: 1; }
+  section > h2 .anchor:hover { color: var(--violet); }
+  section > h2 .anchor.copied { color: var(--emerald); }
+
+  section > .lede {
+    margin: 0 0 28px;
+    font-size: 17px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+  section h3 {
+    margin: 36px 0 10px;
+    font-size: 19px;
+    letter-spacing: -0.005em;
+  }
+  section h4 {
+    margin: 24px 0 8px;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ================================================================
+     Cards / callouts
+     ================================================================ */
+  .card {
+    background: var(--bg-tinted);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin: 16px 0;
+    box-shadow: var(--shadow-card);
+  }
+  .card h3:first-child { margin-top: 0; }
+  .card p:last-child { margin-bottom: 0; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* Icon-chip for a feature in a card */
+  .feature {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .feature h4 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--violet);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .feature p { margin: 0; font-size: 14px; color: var(--text-dim); }
+
+  /* Steps list for the Quickstart */
+  ol.steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 14px;
+  }
+  ol.steps > li {
+    counter-increment: step;
+    background: var(--bg-tinted);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px 18px 64px;
+    position: relative;
+    box-shadow: var(--shadow-card);
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 16px; top: 18px;
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--violet-deep), var(--indigo));
+    color: #fff;
+    border-radius: 10px;
+    display: grid; place-items: center;
+    font-family: ui-monospace, monospace;
+    font-weight: 700;
+    font-size: 15px;
+    box-shadow: 0 4px 18px rgba(139,92,246,0.35);
+  }
+  ol.steps > li b.title { color: var(--text); }
+
+  /* Tip / Note callouts */
+  .tip, .warning {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 14px 18px;
+    margin: 18px 0;
+    background: var(--bg-tinted);
+    font-size: 14.5px;
+  }
+  .tip { border-left: 3px solid var(--cyan); }
+  .warning { border-left: 3px solid var(--amber); }
+  .tip .lbl, .warning .lbl {
+    display: inline-block;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--cyan); margin-right: 8px;
+  }
+  .warning .lbl { color: var(--amber); }
+  .tip p, .warning p { margin: 6px 0 0; }
+
+  /* Inline monospace snippet */
+  code.dim, .snippet {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--violet);
+  }
+  .snippet { padding: 4px 10px; }
+
+  /* Tables */
+  table.kv {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 18px;
+    font-size: 14px;
+  }
+  table.kv th, table.kv td {
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  table.kv th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table.kv tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Keyboard shortcut list */
+  .kbd-list {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 18px;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  .kbd-list .label { color: var(--text-dim); }
+  .kbd-list .keys { display: inline-flex; gap: 4px; justify-content: flex-end; }
+
+  /* ASCII mini-diagrams */
+  pre.diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    border-radius: 10px;
+    color: var(--text-dim);
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  pre.diagram .lbl-c { color: var(--cyan); }
+  pre.diagram .lbl-v { color: var(--violet); }
+  pre.diagram .lbl-m { color: var(--amber); }
+  pre.diagram .lbl-t { color: var(--emerald); }
+
+  /* ================================================================
+     Glossary
+     ================================================================ */
+  .glossary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 32px;
+  }
+  @media (max-width: 720px) { .glossary { grid-template-columns: 1fr; } }
+  .glossary .term {
+    border-bottom: 1px dashed var(--border);
+    padding: 12px 0 14px;
+  }
+  .glossary .term .name {
+    display: block;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .glossary .term .name code { font-size: 13px; color: var(--violet); }
+  .glossary .term .body { font-size: 13.5px; color: var(--text-dim); line-height: 1.55; }
+  .glossary .term .body a { font-size: 13px; }
+  .glossary .term .tag {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.04);
+  }
+
+  /* Letter divider rows */
+  .letter-row {
+    grid-column: 1 / -1;
+    font-size: 24px;
+    color: var(--violet);
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-weight: 600;
+  }
+
+  /* ================================================================
+     Footer
+     ================================================================ */
+  footer {
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 30px 0 60px;
+    text-align: center;
+  }
+  footer a { color: var(--text-dim); }
+
+  /* ================================================================
+     Print styles
+     ================================================================ */
+  @media print {
+    body::before { display: none; }
+    .toc-wrap { position: static; }
+    a { color: #161922; border-bottom-color: #888; }
+    section { margin-bottom: 32px; page-break-inside: avoid; }
+    .card, .feature { page-break-inside: avoid; }
+    body { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap hero">
+  <div class="badge">User Guide · v1.0</div>
+  <h1>Remotion Video Editor</h1>
+  <p class="tagline">
+    A fully local, free, open-source web-based video editor. Drag clips and
+    images onto a timeline, tweak Remotion variables (scale, opacity, rotation,
+    transitions, spring entrances), and export the final video as MP4 — all
+    from a React&nbsp;+&nbsp;Vite frontend that talks to a Node&nbsp;+&nbsp;Express
+    backend that uses Remotion's bundler and renderer to produce the final
+    video headlessly.
+  </p>
+  <div class="meta">
+    <span>📖 Audience: content creators & video editors</span>
+    <span>🕒 Reading time: ~25 min</span>
+    <span>🎬 Last updated: today</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     TABLE OF CONTENTS  (sticky)
+     ============================================================ -->
+<nav class="toc-wrap" aria-label="Table of contents">
+  <div class="wrap">
+    <div class="title">📑 Contents</div>
+    <ul class="toc">
+      <li class="group-head">Start here</li>
+      <li><a href="#quickstart">Quickstart — your first 90 seconds</a></li>
+      <li><a href="#interface">The interface at a glance</a></li>
+
+      <li class="group-head">Working with media</li>
+      <li><a href="#uploading">Uploading media</a></li>
+      <li><a href="#timeline">The timeline (3 lanes)</a></li>
+      <li><a href="#video-clips">Editing video & image clips</a></li>
+      <li><a href="#audio-clips">Editing audio clips</a></li>
+      <li><a href="#text-clips">Editing text clips</a></li>
+      <li><a href="#transitions">Transitions & entrance physics</a></li>
+
+      <li class="group-head">Save & ship</li>
+      <li><a href="#shortcuts">Keyboard shortcuts</a></li>
+      <li><a href="#save-share-load">Save, share & load projects</a></li>
+      <li><a href="#exporting">Exporting to MP4</a></li>
+      <li><a href="#tips">Tips & tricks</a></li>
+
+      <li class="group-head">Reference</li>
+      <li><a href="#glossary">Glossary (50+ terms)</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ============================================================
+     1. QUICKSTART / CHEATSHEET  ─ first content section
+     ============================================================ -->
+<section id="quickstart">
+  <h2>
+    <span class="num">Section 1</span>
+    Quickstart — your first 90 seconds
+    <a class="anchor" href="#quickstart" aria-label="Anchor link to Quickstart">#</a>
+  </h2>
+  <p class="lede">
+    The whole app is built around one loop:
+    <b style="color:var(--violet)">upload → arrange → tweak → export</b>.
+    Walk through it once, then you can ignore this guide for everything
+    except the harder knobs.
+  </p>
+
+  <ol class="steps">
+    <li>
+      <b class="title">Upload some media</b><br>
+      Click <code class="snippet">Upload</code> in the top-left <b>Media Bin</b>
+      — or just drag files in. Video, image, and audio are all accepted
+      (max 500 MB each). Each upload shows up as a tile in the bin.
+    </li>
+    <li>
+      <b class="title">Drag a clip onto a timeline lane</b><br>
+      Drag a video/image to the top lane, or an audio file to the middle lane,
+      or click <code class="snippet">+ Text</code> for an instant text overlay.
+      Drop it where the green guide line shows the timestamp you want.
+    </li>
+    <li>
+      <b class="title">Tweak it in the Property Inspector</b><br>
+      Click the clip to select it. The right-side panel shows everything you
+      can change: timing (start, in, out), transform (scale, opacity, rotation),
+      transitions, and for video & image — entrance physics with a real spring.
+    </li>
+    <li>
+      <b class="title">Watch, then export to MP4</b><br>
+      The top-center panel is a frame-perfect Live Preview at your current
+      canvas size (720p, 1080p, vertical 9:16, square 1:1). Press
+      <kbd>Space</kbd> to play/pause. When you're happy, click
+      <code class="snippet">Export MP4</code> in the top toolbar — the server
+      renders the timeline and downloads the MP4 for you.
+    </li>
+  </ol>
+
+  <div class="tip">
+    <span class="lbl">Tip</span>
+    Every change you make is shown in the preview instantly. You don't need to
+    render to check your work — only to <i>download</i> the final video. Save
+    render time by previewing first, exporting last.
+  </div>
+
+  <h3>Mental model in 30 seconds</h3>
+<pre class="diagram">
+ <span class="lbl-c">[Media Bin]</span>  →  <span class="lbl-t">[Timeline]</span>  →  <span class="lbl-v">[Preview]</span>  →  <span class="lbl-m">[MP4]</span>
+  your raw clips      ordered on a 3-lane       live render         final file
+                      horizontal track          of your timeline
+</pre>
+
+  <div class="warning">
+    <span class="lbl">Heads-up</span>
+    <p>You do <b>not</b> need to know code, React, or Remotion to use this app.
+    Everything happens in the UI. If you ever see a "Remotion variable"
+    mentioned in this guide, that's just the name of something the
+    Property Inspector slider controls — it's not asking you to write any.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     2. INTERFACE
+     ============================================================ -->
+<section id="interface">
+  <h2>
+    <span class="num">Section 2</span>
+    The interface at a glance
+    <a class="anchor" href="#interface" aria-label="Anchor link to interface">#</a>
+  </h2>
+  <p class="lede">Four panels, each with one job. Once you know which is which, everything else is just juggling them.</p>
+
+  <div class="grid-3">
+    <div class="feature">
+      <h4>🎬 Media Bin (left)</h4>
+      <p>Where your uploaded files live. Drag from here onto the timeline to add a clip.</p>
+    </div>
+    <div class="feature">
+      <h4>👁 Live Preview (top-center)</h4>
+      <p>Frame-perfect render of your timeline. What you see is what's exported.</p>
+    </div>
+    <div class="feature">
+      <h4>✂ Timeline (bottom-center)</h4>
+      <p>Three lanes for video / image, audio, and text. Drag clips to arrange; drag edges to trim.</p>
+    </div>
+    <div class="feature" style="grid-column: 1 / -1;">
+      <h4>⚙ Property Inspector (right)</h4>
+      <p>Edits the selected clip — timing, scale, opacity, transitions, springs, text formatting. Always reflects whatever clip you've clicked on the timeline.</p>
+    </div>
+  </div>
+
+  <h3>Top toolbar at a glance</h3>
+  <table class="kv">
+    <thead><tr><th>Button</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>Project name input</td><td>The name used by <b>Save</b> and <b>Share</b>. The last 5 names appear in the <i>Recents</i> history.</td></tr>
+      <tr><td>Save ↓</td><td>Downloads a <code>.remotion.json</code> file containing your full timeline.</td></tr>
+      <tr><td>Share 🔗</td><td>Copies a shareable URL of the current timeline to your clipboard.</td></tr>
+      <tr><td>Load ↥</td><td>Replaces the timeline with a previously saved <code>.remotion.json</code>.</td></tr>
+      <tr><td>Undo / Redo</td><td>Step backward or forward through every edit. <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>.</td></tr>
+      <tr><td>Reset timeline</td><td>Clears every clip — undoable. You'll be asked to confirm.</td></tr>
+      <tr><td>Canvas preset</td><td>The output resolution: 720p, 1080p, Vertical 9:16, Square 1:1.</td></tr>
+      <tr><td>Export MP4</td><td>Renders and downloads the final video.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <span class="lbl">Tip</span>
+    <p>The keyboard icon (<kbd>?</kbd> in the bottom-left of the editor) opens a
+    compact shortcuts list at any time. The <kbd>Space</kbd> key always
+    plays/pauses the preview.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     3. UPLOADING MEDIA
+     ============================================================ -->
+<section id="uploading">
+  <h2>
+    <span class="num">Section 3</span>
+    Uploading media
+    <a class="anchor" href="#uploading" aria-label="Anchor link to uploading">#</a>
+  </h2>
+  <p class="lede">The Media Bin accepts three kinds of files, all under 500&nbsp;MB each.</p>
+
+  <table class="kv">
+    <thead><tr><th>Kind</th><th>Formats accepted</th><th>What happens on drop</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Video</b></td>
+        <td>MP4, WebM, MOV</td>
+        <td>Uploads → appears as tile → drag onto top lane → auto-trims to full source duration.</td>
+      </tr>
+      <tr>
+        <td><b>Image</b></td>
+        <td>PNG, JPG, WebP, GIF</td>
+        <td>Uploads → appears as tile → drag onto top lane → defaults to a 5&nbsp;second still.</td>
+      </tr>
+      <tr>
+        <td><b>Audio</b></td>
+        <td>MP3, WAV, M4A, OGG</td>
+        <td>Uploads → appears as tile → drag onto middle lane (or click <i>+&nbsp;Add</i>).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <span class="lbl">Tip</span>
+    <p>The file picker uses MIME-type wildcards (<code>video/*</code>, <code>image/*</code>, <code>audio/*</code>) — so any format your browser recognises works, not just the list above. The list is what we test by default; less common formats (AV1-encoded WebM, HEIF images, OGG Vorbis, FLAC audio, M4A) usually work because the browser maps them to whatever <code>&lt;video&gt;</code> / <code>&lt;audio&gt;</code> tags know how to play.</p>
+  </div>
+
+  <h3>Two ways to upload</h3>
+  <ul>
+    <li><b>Click</b> the dashed drop zone (or the <code class="snippet">Upload</code> button) and pick files.</li>
+    <li><b>Drag &amp; drop</b> any video, image, or audio file from your desktop onto the bin.</li>
+  </ul>
+
+  <div class="warning">
+    <span class="lbl">Heads-up</span>
+    <p>Files are uploaded to the local server (<code>server/uploads/</code>) and
+    referenced by URL inside your project. If you share a timeline by URL,
+    recipients need to have the <i>same media files</i> uploaded on their machine
+    for the media to play — the timeline only stores media URLs, not the bytes.
+    For a portable backup, use <b>Save</b> to download a <code>.remotion.json</code>
+    alongside your media files.</p>
+  </div>
+
+  <h3>From bin → timeline</h3>
+  <ol>
+    <li>Click any tile's <code class="snippet">+ Add</code> button to drop the clip on the timeline at the playhead.</li>
+    <li><i>Or</i> drag the tile onto the lane you want — drop the mouse anywhere with a green guide line to land there.</li>
+  </ol>
+</section>
+
+<!-- ============================================================
+     4. THE TIMELINE
+     ============================================================ -->
+<section id="timeline">
+  <h2>
+    <span class="num">Section 4</span>
+    The timeline (3 lanes)
+    <a class="anchor" href="#timeline" aria-label="Anchor link to timeline">#</a>
+  </h2>
+  <p class="lede">A horizontal strip showing your video, audio, and text separately. Time flows left → right; seconds are marked by the ruler ticks at the top.</p>
+
+<pre class="diagram">
+            0s    1s    2s    3s    4s    5s    6s    7s    8s
+            |     |     |     |     |     |     |     |     |     |
+  video  ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ← image over video
+  audio        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
+  text                    ▓▓▓▓▓▓▓▓▓▓▓ (3-second headline)
+            |              |
+           clip 1         clip 2 starts
+</pre>
+
+  <h3>What each color means</h3>
+  <div class="grid-2">
+    <div class="feature">
+      <h4 style="color: var(--indigo)">Video lane (top)</h4>
+      <p>Taller cards with thumbnails. Holds videos and images stacked vertically as "layers."</p>
+    </div>
+    <div class="feature">
+      <h4 style="color: var(--emerald)">Audio lane (middle)</h4>
+      <p>Short, thin green cards. Audio plays alongside video — never cross-faded.</p>
+    </div>
+    <div class="feature">
+      <h4 style="color: var(--cyan)">Text lane (bottom)</h4>
+      <p>Thin cyan cards showing the text content (truncated). Always on top of the video.</p>
+    </div>
+    <div class="feature">
+      <h4 style="color: var(--violet)">Playhead (vertical indigo line)</h4>
+      <p>Where you are in the preview. Click anywhere on the ruler to jump to that time.</p>
+    </div>
+  </div>
+
+  <h3>Manipulating clips on the timeline</h3>
+  <table class="kv">
+    <thead><tr><th>Action</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Move a clip</td><td>Drag the clip body left or right. Snaps to other clips' starts/ends (cyan guide) and to the playhead.</td></tr>
+      <tr><td>Trim the start</td><td>Drag the small amber handle on the LEFT edge inward/outward. Only the start of the source media is adjusted.</td></tr>
+      <tr><td>Trim the end</td><td>Same idea, but on the RIGHT handle.</td></tr>
+      <tr><td>Delete a clip</td><td>Hover the clip → click the trash icon. Or press <kbd>Delete</kbd> with the clip selected.</td></tr>
+      <tr><td>Zoom in / out</td><td>Use the <i>−</i> / <i>+</i> buttons in the timeline header (each step is 20 px/sec). More pixels = more precision.</td></tr>
+      <tr><td>Add a text clip</td><td>Click <code class="snippet">+ Text</code> in the timeline header — it lands at the current playhead.</td></tr>
+      <tr><td>Nudge by 0.1 s</td><td>Select a clip, press <kbd>←</kbd> or <kbd>→</kbd>.</td></tr>
+      <tr><td>Nudge by 1 s</td><td>Same, but hold <kbd>Shift</kbd> while pressing the arrow.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <span class="lbl">Tip</span>
+    <p>The snapping is magnetic. If a cyan guide line appears while you drag,
+    you've locked onto a snap target — release to lock in that alignment.
+    It's the easiest way to perfectly align two clips.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     5. EDITING VIDEO / IMAGE CLIPS
+     ============================================================ -->
+<section id="video-clips">
+  <h2>
+    <span class="num">Section 5</span>
+    Editing video &amp; image clips
+    <a class="anchor" href="#video-clips" aria-label="Anchor link to video-clips">#</a>
+  </h2>
+  <p class="lede">Click any video or image clip on the timeline and the Property Inspector on the right shows four sections of controls.</p>
+
+  <h3>1. Timing — when &amp; how long</h3>
+  <table class="kv">
+    <thead><tr><th>Field</th><th>What it controls</th></tr></thead>
+    <tbody>
+      <tr><td><b>Start</b></td><td>Where on the timeline the clip begins playing (seconds from 0).</td></tr>
+      <tr><td><b>In-point</b></td><td>Where in the source media the clip begins (trim the start of the file).</td></tr>
+      <tr><td><b>Out-point</b></td><td>Where in the source media the clip ends (trim the end of the file).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2. Transform — how it looks</h3>
+  <table class="kv">
+    <thead><tr><th>Field</th><th>What it controls</th></tr></thead>
+    <tbody>
+      <tr><td><b>Scale</b></td><td>Resize. <code>1.00×</code> = fits the canvas perfectly. Larger = zooms in, smaller = shrinks.</td></tr>
+      <tr><td><b>Opacity</b></td><td>Transparent → opaque. <code>100%</code> = fully visible. <code>50%</code> = half-transparent and lets the clip below show through.</td></tr>
+      <tr><td><b>Rotation</b></td><td>Rotate around the clip's center, from -180° to 180°.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3. Transitions — fade in &amp; out</h3>
+  <p>Each clip has an <i>enter</i> transition (the way it appears, blending into
+  whatever was before it) and an <i>exit</i> transition (the way it disappears,
+  blending into whatever comes after). Pick a style — <b>None, Fade, Wipe,
+  Slide&nbsp;←, Slide&nbsp;→, Flip</b> — and a duration.</p>
+
+  <div class="card">
+    <h3>Practical patterns</h3>
+    <p><b>Cross-fade blend:</b> Set the previous clip's <i>exit</i> to
+    <code>Fade</code> with the same duration as the next clip's <i>enter</i>
+    <code>Fade</code>. They cross-blend across the overlap.</p>
+    <p><b>Quick chat cut:</b> Both clips use <code>None</code> for both
+    transitions — hard cut.</p>
+  </div>
+
+  <h3>4. Entrance Physics — the Remotion spring</h3>
+  <p>The most distinctive feature of this editor. Toggle the eye icon on the
+  right of the section header to turn it on, then tune four numbers:</p>
+
+  <table class="kv">
+    <thead><tr><th>Knob</th><th>Plain English</th></tr></thead>
+    <tbody>
+      <tr><td><b>Mass</b></td><td>How heavy the moving object feels. Higher = slower fall, more inertia.</td></tr>
+      <tr><td><b>Damping</b></td><td>How quickly the bounce settles. Low = bouncy, high = no overshoot.</td></tr>
+      <tr><td><b>Stiffness</b></td><td>How snappy the spring is. Higher = snaps into place fast.</td></tr>
+      <tr><td><b>Duration</b></td><td>Max time the entrance window can last (seconds). Acts as a safety cap.</td></tr>
+      <tr><td><b>From X / Y / Scale / Opacity</b></td><td>Where the clip <i>starts from</i> at frame 0 of its entrance. The final rest pose is the Transform values above.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <span class="lbl">Try this</span>
+    <p>Mass&nbsp;<code>1</code>, Damping&nbsp;<code>10</code>, Stiffness&nbsp;<code>100</code>,
+    From Scale&nbsp;<code>0.5</code>, From Opacity&nbsp;<code>0</code> — that's
+    the satisfying "pop-in" preset most editor UIs use by default.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     6. EDITING AUDIO CLIPS
+     ============================================================ -->
+<section id="audio-clips">
+  <h2>
+    <span class="num">Section 6</span>
+    Editing audio clips
+    <a class="anchor" href="#audio-clips" aria-label="Anchor link to audio-clips">#</a>
+  </h2>
+  <p class="lede">Select any green card on the audio lane. The Property Inspector shows two sections.</p>
+
+  <div class="grid-2">
+    <div class="feature">
+      <h4>Volume</h4>
+      <p>Loudness. <code>100%</code> is the source's natural level. <code>200%</code>
+      is a loud boost (may clip / distort — avoid it on already-loud sources).</p>
+    </div>
+    <div class="feature">
+      <h4>Fade In / Fade Out</h4>
+      <p>Smooth ramp from silence (fade in, at the start of the trim) or to silence (fade out, at the end). Use 0.2–0.5&nbsp;seconds for natural transitions.</p>
+    </div>
+  </div>
+
+  <h3>Timing &amp; trimming</h3>
+  <p>Identical to video clips — same <b>Start</b>, <b>In-point</b>, and
+  <b>Out-point</b> sliders. The amber handles on the timeline work the same
+  way. Audio clips never get cross-fades from the transition layer; fade
+  yourself, or layer two audio clips overlapping.</p>
+
+  <div class="card">
+    <h3>Common audio recipes</h3>
+    <p><b>Voice-over on a song:</b> Drop the song at <code>0:00</code> with
+    Volume at ~40% and a Fade Out of 2&nbsp;seconds at the end. Drop the voice
+    clip at <code>0:05</code> with Volume at 100% and a Fade In of 0.2&nbsp;seconds.</p>
+    <p><b>Cut-down music for a slideshow:</b> Set both Fade In and Fade Out to
+    1&nbsp;second, trim the source to the exact length of your slideshow clips.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     7. EDITING TEXT CLIPS
+     ============================================================ -->
+<section id="text-clips">
+  <h2>
+    <span class="num">Section 7</span>
+    Editing text clips
+    <a class="anchor" href="#text-clips" aria-label="Anchor link to text-clips">#</a>
+  </h2>
+  <p class="lede">Text clips are their own thing: a headline, a caption, a watermark. Click any cyan card on the text lane to edit it.</p>
+
+  <h3>The four sections of the text inspector</h3>
+  <table class="kv">
+    <thead><tr><th>Section</th><th>Knobs</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Text (top)</b></td>
+        <td>Multi-line content (<code>\n</code> for line breaks), font family (4 system-safe presets), font size (16–400 px), font weight (100–900), color (7 presets + freeform hex), background opacity (0–100% black pill), alignment (left/center/right).</td>
+      </tr>
+      <tr>
+        <td><b>Timing</b></td>
+        <td>When the text becomes visible (Start) and how long it stays on screen (Duration, capped at 60 s).</td>
+      </tr>
+      <tr>
+        <td><b>Position</b></td>
+        <td>X and Y offsets in pixels from canvas center. Positive X → right, positive Y → down.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <span class="lbl">Tip</span>
+    <p>Text clips always enter with a gentle spring by default — you don't
+    need to toggle anything to get nice cursor-friendly motion on a headline.
+    If you want no motion, set <code>entrance.enabled = false</code> via JSON
+    in the saved project file, or just rely on the default tick.</p>
+  </div>
+
+  <div class="warning">
+    <span class="lbl">Heads-up</span>
+    <p>The font picker offers system-safe stacks only — anything you type in
+    the freeform font field must be installed on the machine that RENDERS the
+    MP4. If you need a non-system font in your video, you'd need to install
+    it on the server (Docker side) — see CONTRIBUTING.md.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     8. TRANSITIONS & ENTRANCES
+     ============================================================ -->
+<section id="transitions">
+  <h2>
+    <span class="num">Section 8</span>
+    Transitions &amp; entrance physics
+    <a class="anchor" href="#transitions" aria-label="Anchor link to transitions">#</a>
+  </h2>
+  <p class="lede">A quick reference to every transition plus a deeper primer on the spring physics — because once you've used it once, you can't go back.</p>
+
+  <h3>Transition cheat sheet</h3>
+  <table class="kv">
+    <thead><tr><th>Type</th><th>Look</th><th>Best for</th></tr></thead>
+    <tbody>
+      <tr><td><b>None</b></td><td>Instant change</td><td>Punchy edits, dialog, news-y feels.</td></tr>
+      <tr><td><b>Fade</b></td><td>Opacity ramps 0→1</td><td>Cross-blending between two clips (use the same duration on both ends).</td></tr>
+      <tr><td><b>Wipe</b></td><td>Edge sweep</td><td>Travel / change-of-scene feels.</td></tr>
+      <tr><td><b>Slide ←</b></td><td>New clip pushes the previous one left</td><td>Continuous scroll, like a phone swipe.</td></tr>
+      <tr><td><b>Slide →</b></td><td>New clip pushes the previous one right</td><td>Same but reversed direction.</td></tr>
+      <tr><td><b>Flip</b></td><td>3D rotation around the vertical axis</td><td>Card-flipping reveal, "now we look at this".</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Springs — the deeper primer</h3>
+  <p>Each clip can have an entrance animation driven by a real <b>spring</b>
+  (not a keyframe or an easing curve). A spring simulates how a physical
+  object bounces when pushed. Two ingredients control it: <i>how much force
+  pulls it back</i> and <i>how much friction slows it down</i>.</p>
+
+  <div class="grid-2">
+    <div class="feature">
+      <h4>Stiffness ↑</h4>
+      <p>Snappier. Reaches the rest pose faster. Best for short, punchy entrances.</p>
+    </div>
+    <div class="feature">
+      <h4>Damping ↑</h4>
+      <p>Less overshoot. At very high damping the motion becomes over-damped (no bounce). At low damping it oscillates.</p>
+    </div>
+    <div class="feature">
+      <h4>Mass ↑</h4>
+      <p>Slower and lazier. Higher mass means the same force produces less acceleration.</p>
+    </div>
+    <div class="feature">
+      <h4>From X / Y / Scale / Opacity</h4>
+      <p>Where the clip <i>starts</i>. The spring pulls from there toward the rest pose (Transform values). Negative Y = above center.</p>
+    </div>
+  </div>
+
+  <div class="tip">
+    <span class="lbl">Recipes</span>
+    <p><b>Calm fade-up:</b> Mass&nbsp;<code>0.5</code>, Damping&nbsp;<code>14</code>,
+    Stiffness&nbsp;<code>140</code>, From Opacity&nbsp;<code>0</code> (the
+    text default). Soft, no bounce.</p>
+    <p><b>Bouncy pop:</b> Mass&nbsp;<code>1</code>, Damping&nbsp;<code>8</code>,
+    Stiffness&nbsp;<code>200</code>, From Scale&nbsp;<code>0.3</code>.
+    Squashes in, bounces once.</p>
+    <p><b>Heavy thud:</b> Mass&nbsp;<code>3</code>, Damping&nbsp;<code>20</code>,
+    Stiffness&nbsp;<code>300</code>, From Y&nbsp;<code>-200</code>. Falls in
+    from above and stops dead.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     9. KEYBOARD SHORTCUTS
+     ============================================================ -->
+<section id="shortcuts">
+  <h2>
+    <span class="num">Section 9</span>
+    Keyboard shortcuts
+    <a class="anchor" href="#shortcuts" aria-label="Anchor link to shortcuts">#</a>
+  </h2>
+  <p class="lede">Everything you can do without the mouse. The shortcuts dialog also lives inside the app — click the small keyboard icon (<kbd>?</kbd>) in the bottom-left.</p>
+
+  <h3>Playback</h3>
+  <div class="kbd-list">
+    <div class="label">Play / pause the preview</div><div class="keys"><kbd>Space</kbd></div>
+  </div>
+
+  <h3>Timeline</h3>
+  <div class="kbd-list">
+    <div class="label">Remove selected clip</div><div class="keys"><kbd>Delete</kbd></div>
+    <div class="label">Nudge selected clip start by 0.1 s</div><div class="keys"><kbd>←</kbd> <kbd>→</kbd></div>
+    <div class="label">Nudge selected clip start by 1 s</div><div class="keys"><kbd>Shift</kbd> <kbd>←/→</kbd></div>
+    <div class="label">Drop a text clip at the playhead</div><div class="keys"><kbd>Click</kbd> at <code class="snippet">+ Text</code></div>
+  </div>
+
+  <h3>History</h3>
+  <div class="kbd-list">
+    <div class="label">Undo the last edit (a slider drag = one undo step)</div><div class="keys"><kbd>Ctrl/⌘</kbd> <kbd>Z</kbd></div>
+    <div class="label">Redo</div><div class="keys"><kbd>Ctrl/⌘</kbd> <kbd>Y</kbd></div>
+    <div class="label">Redo (alternate)</div><div class="keys"><kbd>Ctrl/⌘</kbd> <kbd>Shift</kbd> <kbd>Z</kbd></div>
+  </div>
+
+  <h3>Editing</h3>
+  <div class="kbd-list">
+    <div class="label">Insert a media-bin asset on any lane</div><div class="keys"><kbd>Drag</kbd> → <kbd>drop</kbd></div>
+  </div>
+
+  <h3>Sharing</h3>
+  <div class="kbd-list">
+    <div class="label">Copy a shareable URL of the current timeline to your clipboard</div><div class="keys"><kbd>Click</kbd> at <code class="snippet">Share</code></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     10. SAVE, SHARE, LOAD
+     ============================================================ -->
+<section id="save-share-load">
+  <h2>
+    <span class="num">Section 10</span>
+    Save, share &amp; load projects
+    <a class="anchor" href="#save-share-load" aria-label="Anchor link to save-share-load">#</a>
+  </h2>
+  <p class="lede">Three ways to persist work. They each capture exactly the same JSON shape: a <code>.remotion.json</code> file with one timeline inside.</p>
+
+  <div class="grid-3">
+    <div class="feature">
+      <h4>💾 Save</h4>
+      <p>Downloads a <code class="snippet">.remotion.json</code> file (your project name + that extension). Save it anywhere: next to your media folder is best.</p>
+    </div>
+    <div class="feature">
+      <h4>🔗 Share</h4>
+      <p>Copies a URL that contains the timeline JSON to your clipboard. The URL is automatically loaded when someone opens it in the app.</p>
+    </div>
+    <div class="feature">
+      <h4>↥ Load</h4>
+      <p>Replaces the current timeline with a saved <code class="snippet">.remotion.json</code> file from disk. Any unsaved edits are lost (Ctrl+Z only restores in-memory history).</p>
+    </div>
+  </div>
+
+  <h3>What's actually in the JSON?</h3>
+<pre class="diagram">{
+  "version": 1,
+  "kind": "remotion-editor-project",
+  "name": "my-video",
+  "savedAt": "2025-07-10T12:34:56.000Z",
+  "timeline": {
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "backgroundColor": "#000000",
+    "clips": [ ... ],          // video / image clips
+    "audioClips": [ ... ],
+    "textClips": [ ... ]
+  }
+}</pre>
+
+  <div class="warning">
+    <span class="lbl">Heads-up</span>
+    <p>Sharing by URL works for small projects. If your timeline approaches
+    thousands of characters, the toast will say "Project too large for a URL.
+    Use Save instead." For typical projects (a few minutes of video) the limit
+    is comfortably generous.</p>
+  </div>
+
+  <p>The toolbar remembers the last 5 project names you used — the
+  <i>Recents</i> dropdown lets you quickly rename-and-save without typing.</p>
+</section>
+
+<!-- ============================================================
+     11. EXPORTING
+     ============================================================ -->
+<section id="exporting">
+  <h2>
+    <span class="num">Section 11</span>
+    Exporting to MP4
+    <a class="anchor" href="#exporting" aria-label="Anchor link to exporting">#</a>
+  </h2>
+  <p class="lede">The final step. The server bundles the composition, renders it frame-by-frame with headless Chrome, and downloads the MP4.</p>
+
+  <ol>
+    <li>Click <code class="snippet">Export MP4</code> in the top toolbar.</li>
+    <li>The progress bar appears and updates as the renderer works. Render time depends on timeline length and source media complexity; a 30-second 1080p clip typically takes 15&nbsp;–&nbsp;60&nbsp;seconds.</li>
+    <li>When done, the MP4 is automatically downloaded by your browser. You also get a <code class="snippet">Last render</code> link next to the button — click it to open in a new tab.</li>
+  </ol>
+
+  <div class="card">
+    <h3>What "Export" actually does</h3>
+    <p>Behind the scenes the server:</p>
+    <ol>
+      <li>Uses <code>@remotion/bundler</code> to bundle <code>compositions/</code> + your timeline JSON into a self-contained Webpack bundle.</li>
+      <li>Uses <code>@remotion/renderer</code> to spin up headless Chrome, drive it frame-by-frame through the bundled composition, and capture each frame to an MP4.</li>
+      <li>Streams the finished MP4 back to the browser, which triggers the file download.</li>
+    </ol>
+  </div>
+
+  <h3>If the export fails</h3>
+  <p>The first thing to try is <b>saving the project</b> and looking at the
+  toast for the error. Common causes:</p>
+  <ul>
+    <li>A media URL in the timeline points to a file the server can't reach (deleted from the Media Bin, or you renamed the file between sessions).</li>
+    <li>The server is mid-shutdown — wait a moment and retry.</li>
+    <li>Disk is full (<code>server/renders/</code> needs at least 2× the final file size in scratch space during render).</li>
+  </ul>
+</section>
+
+<!-- ============================================================
+     12. TIPS & TRICKS
+     ============================================================ -->
+<section id="tips">
+  <h2>
+    <span class="num">Section 12</span>
+    Tips &amp; tricks
+    <a class="anchor" href="#tips" aria-label="Anchor link to tips">#</a>
+  </h2>
+  <p class="lede">A grab-bag of things you'll discover eventually. Listed up front.</p>
+
+  <div class="grid-2">
+    <div class="feature">
+      <h4>Zoom way in for fine-grained trim</h4>
+      <p>If two clips need to butt perfectly against each other, zoom the timeline
+      so 1 second is more than 200 px, then drag the amber handles until they snap.</p>
+    </div>
+    <div class="feature">
+      <h4>Snap points include the playhead</h4>
+      <p>Want a fade-in aligned to a specific frame? Move the preview to that frame,
+      then drag your clip — it'll snap to the playhead.</p>
+    </div>
+    <div class="feature">
+      <h4>Vertical 9:16 and Square 1:1 for social</h4>
+      <p>Pick a Canvas preset after switching the project's intent — vertical for
+      TikTok / Reels / Shorts, square for Instagram.</p>
+    </div>
+    <div class="feature">
+      <h4>Reset timeline ≠ undo</h4>
+      <p>Reset asks for confirmation, BUT it sets a single undo step. Press
+      <kbd>Ctrl</kbd>+<kbd>Z</kbd> once after a reset and your timeline comes
+      back.</p>
+    </div>
+    <div class="feature">
+      <h4>Each slider drag = one undo step</h4>
+      <p>Drag a slider, release, then move another slider. You'll see two
+      undo steps. If you're mid-drag and want to cancel, drag past the slider's
+      end and release — the value snaps back.</p>
+    </div>
+    <div class="feature">
+      <h4>Save often, render rarely</h4>
+      <p>Saves are instant. Renders take 15-60&nbsp;seconds. Save before any
+      major change, render only when you're ready to ship.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     13. GLOSSARY (last section)
+     ============================================================ -->
+<section id="glossary">
+  <h2>
+    <span class="num">Section 13</span>
+    Glossary
+    <a class="anchor" href="#glossary" aria-label="Anchor link to glossary">#</a>
+  </h2>
+  <p class="lede">
+    Technical, AI, image- and video-generation terms you'll bump into while
+    editing here or using adjacent tools. Alphabetized. The tags group terms by
+    topic so you can skim for context.
+  </p>
+  <p style="font-size:13px;color:var(--text-muted);margin-top:-10px">
+    <b style="color:var(--text-dim)">Tags:</b>
+    <span class="snippet">vid</span> video editing ·
+    <span class="snippet">rem</span> Remotion ·
+    <span class="snippet">ai</span> AI ·
+    <span class="snippet">img</span> image generation ·
+    <span class="snippet">fx</span> visual effects ·
+    <span class="snippet">web</span> web / tech ·
+    <span class="snippet">anim</span> design / animation ·
+    <span class="snippet">aud</span> audio
+  </p>
+
+  <div class="glossary">
+
+    <div class="letter-row">A</div>
+
+    <div class="term">
+      <span class="name">AI (artificial intelligence) <span class="tag">ai</span></span>
+      <div class="body">A broad term for software that performs tasks normally needing human cognition — recognising images, generating text, suggesting edits. In this guide's context, AI tools often generate or enhance media (images, captions, voices) that <i>you</i> then drop into the editor.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">API (endpoint) <span class="tag">web</span></span>
+      <div class="body">A URL path the server exposes to the client. This editor's backend exposes <code>/api/upload</code> (drop files here), <code>/api/render</code> (turn timeline into MP4), and <code>/api/health</code> (liveness check the docker stack polls).</div>
+    </div>
+
+    <div class="term">
+      <span class="name">AV1 <span class="tag">vid</span></span>
+      <div class="body">A modern, royalty-free video codec. Smaller files than H.264 at the same quality. The Remotion renderer supports several codec families — the default export is H.264 for maximum compatibility.</div>
+    </div>
+
+    <div class="letter-row">B</div>
+
+    <div class="term">
+      <span class="name">Bitrate <span class="tag">aud</span><span class="tag">vid</span></span>
+      <div class="body">Bits per second of audio or video stream. Higher bitrate = larger file, more detail. The default MP4 export uses a high enough bitrate for streaming-quality 1080p without bloating.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Bundler <span class="tag">web</span><span class="tag">rem</span></span>
+      <div class="body">A tool that takes many source files (your <code>compositions/</code> + React + Remotion) and packs them into one self-contained bundle that the renderer can load headlessly. <code>@remotion/bundler</code> wraps Webpack for this job.</div>
+    </div>
+
+    <div class="letter-row">C</div>
+
+    <div class="term">
+      <span class="name">CFG scale (classifier-free guidance) <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">A slider in diffusion image generators that controls how literally the model obeys your prompt. Low = creative / loose interpretation, high = strict but potentially over-saturated.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Codec <span class="tag">vid</span></span>
+      <div class="body">The compression algorithm that turns raw video frames into a stream. Common codecs: H.264 (most compatible), H.265 / HEVC (smaller files, less compatible), VP9 (open, YouTube-friendly), AV1 (newest, royalty-free).</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Composition <span class="tag">rem</span></span>
+      <div class="body">A Remotion React component that takes <code>inputProps</code> and renders one full video. This editor has exactly one composition — <code>MainComposition</code> — which is fed the entire timeline JSON as its input.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">ControlNet <span class="tag">img</span></span>
+      <div class="body">An add-on for Stable Diffusion that lets you guide generation with a separate input: a pose, an outline, a depth map. Useful for keeping characters consistent across many frames.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">CORS (Cross-Origin Resource Sharing) <span class="tag">web</span></span>
+      <div class="body">A browser security rule that prevents JavaScript on one domain from fetching resources from another domain. The dev proxy in Vite and the nginx proxy in Docker both handle this so the React app can talk to the Express backend.</div>
+    </div>
+
+    <div class="letter-row">D</div>
+
+    <div class="term">
+      <span class="name">DALL·E <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">OpenAI's text-to-image diffusion model. Generates images from natural language prompts. Save your favorites as PNG/JPG and bring them into this editor via the Media Bin.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Deflicker <span class="tag">fx</span></span>
+      <div class="body">Post-processing that smooths frame-to-frame brightness changes. Useful for video collages assembled from many source clips with different exposures.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Denoising (steps / strength) <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">In Stable Diffusion, the "denoising strength" of an img2img pass. Higher = more change from the source. In audio, "denoising" often means removing background hiss.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Diffusion model <span class="tag">ai</span><span class="tag">img</span><span class="tag">fx</span></span>
+      <div class="body">A class of generative model that learns to remove noise from images, step by step, in reverse. The basis for Stable Diffusion, DALL·E 2/3, Midjourney, Sora, Runway Gen, and most modern image / video generators. Patience is the civilization-level answer; for this guide: "the AI behind most modern image / video generators."</div>
+    </div>
+
+    <div class="letter-row">E</div>
+
+    <div class="term">
+      <span class="name">Easing <span class="tag">anim</span></span>
+      <div class="body">The shape of an animation curve. <b>Ease-in</b> starts slow, <b>ease-out</b> ends slow, <b>ease-in-out</b> both. <b>Bezier curves</b> in CSS let you define custom easings. Springs are an alternative to base easings because they have built-in physical realism.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Embedding <span class="tag">ai</span></span>
+      <div class="body">A vector representation of something (a word, an image, a video frame) as a list of floats, where similar things are close in vector space. The basis for semantic search and RAG.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Express <span class="tag">web</span></span>
+      <div class="body">The minimal web-server framework used by the editor's backend. Routes <code>/api/*</code> are mounted on a single Express app in <code>server/src/index.ts</code>.</div>
+    </div>
+
+    <div class="letter-row">F</div>
+
+    <div class="term">
+      <span class="name">Fade in / fade out <span class="tag">aud</span><span class="tag">fx</span></span>
+      <div class="body">A smooth ramp from silence (fade in) or to silence (fade out) for audio, and a transparency ramp for video. Used to avoid abrupt starts and stops.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">FFmpeg <span class="tag">web</span><span class="tag">vid</span></span>
+      <div class="body">The canonical open-source command-line tool for video and audio transcoding. Underpins most video-processing pipelines, including what <code>@remotion/renderer</code> uses internally to package frames into an MP4.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Fine-tuning <span class="tag">ai</span></span>
+      <div class="body">Training a pre-existing model further on a small, specific dataset so it does <i>your</i> task better — eg. Stable Diffusion fine-tuned on your product photos.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">FPS (frames per second) <span class="tag">vid</span></span>
+      <div class="body">How many individual pictures the video plays per second. 30 fps is the default in this editor. Cinematic film is 24&nbsp;fps. Higher fps = smoother motion but larger files.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Frame <span class="tag">vid</span></span>
+      <div class="body">A single still image in a video. At 30 fps, one second of video has 30 frames. Each frame is identified by an integer (0, 1, 2…) — frame <i>N</i> shows the timeline at exactly <code>N / fps</code> seconds.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Frame interpolation <span class="tag">fx</span><span class="tag">vid</span></span>
+      <div class="body">Synthesizing intermediate frames between two existing frames to slow down footage (or generate higher-fps video). Modern AI tools can do this very convincingly.</div>
+    </div>
+
+    <div class="letter-row">G</div>
+
+    <div class="term">
+      <span class="name">GAN (Generative Adversarial Network) <span class="tag">ai</span></span>
+      <div class="body">An older class of generative model (predates transformers &amp; diffusion). Two networks compete: one generates, one discriminates. Still used in some image and style-transfer tools, though diffusion has overtaken it.</div>
+    </div>
+
+    <div class="letter-row">H</div>
+
+    <div class="term">
+      <span class="name">Headless (browser) <span class="tag">web</span><span class="tag">vid</span></span>
+      <div class="body">A browser (usually Chrome) running with no visible window — driven programmatically to render pages or capture frames. The editor's renderer uses headless Chrome to draw every frame of your timeline into the final MP4, so it can run on a server with no display.</div>
+    </div>
+
+    <div class="letter-row">I</div>
+
+    <div class="term">
+      <span class="name">Inference <span class="tag">ai</span></span>
+      <div class="body">Running a trained model to produce output. "Prompt → inference → image." Inference is what takes GPU time and is what API providers charge you for.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">inputProps <span class="tag">rem</span></span>
+      <div class="body">In Remotion, the props the React composition receives at runtime. This editor's <code>MainComposition</code> has one prop: <code>{ timeline: TimelineState }</code>.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Interpolation <span class="tag">rem</span><span class="tag">anim</span></span>
+      <div class="body">Computing a value at an intermediate point between two known values. Remotion's <code>interpolate()</code> turns frame numbers into values like opacity, scale, x. Often paired with <code>spring()</code>.</div>
+    </div>
+
+    <div class="letter-row">J</div>
+
+    <div class="term">
+      <span class="name">JSON (JavaScript Object Notation) <span class="tag">web</span></span>
+      <div class="body">A plain-text data format. Save files are JSON (the <code>.remotion.json</code> extension is just convention). Reading a save file in any text editor shows the same data your timeline editor sees.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Jump-cut <span class="tag">vid</span></span>
+      <div class="body">A sharp cut between two shots at the same angle that skips time forward. Distinct from a fade — there's no overlap or transition.</div>
+    </div>
+
+    <div class="letter-row">K</div>
+
+    <div class="term">
+      <span class="name">Keyframe <span class="tag">vid</span><span class="tag">anim</span></span>
+      <div class="body">A point in time where you explicitly set a property value. Software interpolates between keyframes. This editor doesn't expose keyframes directly — the entrance physics are continuous via springs — but the file format supports it.</div>
+    </div>
+
+    <div class="letter-row">L</div>
+
+    <div class="term">
+      <span class="name">Latent (space) <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">A compressed representation an image or video lives in inside a generative model. You don't see it directly — the model converts it back and forth between latent space and pixel space.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">LLM (Large Language Model) <span class="tag">ai</span></span>
+      <div class="body">A generative model trained on huge amounts of text that produces text in response to a prompt. Examples: GPT, Claude, Llama, Gemini. Often used to draft scripts or captions that you then drop into a video editor.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">LoRA (Low-Rank Adaptation) <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">A small, trainable patch for an existing diffusion model that teaches it a new concept (a face, a brand) with only a few dozen photos. Cheap to train, easy to share.</div>
+    </div>
+
+    <div class="letter-row">M</div>
+
+    <div class="term">
+      <span class="name">Mass / Damping / Stiffness <span class="tag">anim</span><span class="tag">rem</span></span>
+      <div class="body">The three ingredients of a spring. <b>Mass</b> = heaviness, <b>damping</b> = friction, <b>stiffness</b> = pull. The Remotion docs have a <a href="https://www.remotion.dev/docs/spring">handy playground</a> for tuning them.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Midjourney <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">A widely-used commercial text-to-image diffusion model. Highly stylised out of the box, popular for art-direction-heavy work.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">MIME type <span class="tag">web</span></span>
+      <div class="body">A label a server attaches to a response describing the file's type, eg. <code>video/mp4</code>, <code>image/png</code>, <code>audio/mpeg</code>. Browsers use it to decide how to play the file.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Motion blur <span class="tag">fx</span><span class="tag">vid</span></span>
+      <div class="body">A visual artifact from real cameras when objects move during the exposure. Artificial motion blur in video transitions adds realism; can also be used stylistically.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">MP4 (container) <span class="tag">vid</span></span>
+      <div class="body">A file <i>container</i> for video + audio. The compression inside is determined by the codec (H.264, H.265…). "MP4" alone doesn't tell you the codec — but almost all consumer MP4s are H.264.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Multer <span class="tag">web</span></span>
+      <div class="body">A Node middleware for handling multipart/form-data uploads. The editor's <code>/api/upload</code> route uses Multer to receive dropped files from the React client.</div>
+    </div>
+
+    <div class="letter-row">O</div>
+
+    <div class="term">
+      <span class="name">Optical flow <span class="tag">fx</span><span class="tag">vid</span></span>
+      <div class="body">A per-pixel motion estimate between frames. The basis for AI-driven frame interpolation and slow-motion.</div>
+    </div>
+
+    <div class="letter-row">P</div>
+
+    <div class="term">
+      <span class="name">Player (<code>@remotion/player</code>) <span class="tag">rem</span></span>
+      <div class="body">A React component from Remotion that renders a composition inside the browser, frame-accurately, with optional controls. The live preview in this editor <i>is</i> a <code>Player</code> wrapped in custom controls (play/pause/loop buttons).</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Prompt <span class="tag">ai</span></span>
+      <div class="body">A text instruction you give a generative model. "A cat in a wizard hat, watercolour." The fundamental "programming language" of diffusion tools.</div>
+    </div>
+
+    <div class="letter-row">R</div>
+
+    <div class="term">
+      <span class="name">RAG (Retrieval-Augmented Generation) <span class="tag">ai</span></span>
+      <div class="body">A way to give an LLM access to your private documents — it retrieves relevant passages, then answers with them in context. Used to script a video using your own prior scripts as reference material.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Renderer (<code>@remotion/renderer</code>) <span class="tag">rem</span></span>
+      <div class="body">The Remotion package that takes a bundled composition and produces a real video file. Uses a headless browser under the hood — that's why it requires a real, server-class machine and not, say, a Lambda.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Runway ML <span class="tag">ai</span><span class="tag">fx</span></span>
+      <div class="body">A commercial AI video tool (Gen-1, Gen-2, Gen-3). Apply styles to existing footage or generate short clips from text. Inputs and outputs can be brought into this editor.</div>
+    </div>
+
+    <div class="letter-row">S</div>
+
+    <div class="term">
+      <span class="name">Sample rate <span class="tag">aud</span></span>
+      <div class="body">Audio samples per second (Hz). 44,100 Hz (CD quality) is common. Higher rates capture higher frequencies but use more storage.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Seed <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">A number that random-number-generator-generative models start from. Same seed + same prompt = same image. Useful for "I want this one but slightly different" iterations.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Sequence <span class="tag">rem</span></span>
+      <div class="body">A Remotion component that timeshifts a child. The <code>Sequence</code> from={5} durationInFrames={30} frame renders the child from second 5 to second 6 of the composition — used to layer clips at different times. <a href="https://www.remotion.dev/docs/sequence">Remotion docs</a>.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Sora <span class="tag">ai</span><span class="tag">fx</span></span>
+      <div class="body">OpenAI's text-to-video diffusion model. Generates short, photorealistic-or-stylised video clips from a natural-language description. Limited release as of this guide's writing.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Spring physics <span class="tag">anim</span><span class="tag">rem</span></span>
+      <div class="body">An animation function that simulates a physical spring. Remotion's <code>spring()</code> takes frame numbers and returns a value (0 to 1) that follows spring dynamics. Each entrance in this editor uses one.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Stable Diffusion <span class="tag">ai</span><span class="tag">img</span></span>
+      <div class="body">An open-source diffusion image generator. Released by Stability AI. Many fine-tunes and control-nets built on top of it.</div>
+    </div>
+
+    <div class="letter-row">T</div>
+
+    <div class="term">
+      <span class="name">Timecode <span class="tag">vid</span></span>
+      <div class="body">A way to label a position in time. This editor uses <code>HH:MM:SS:FF</code> where <code>FF</code> is the frame number within the current second — e.g. <code>00:01:23:14</code> = 1 minute 23 seconds, frame 14.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Timeline (Remotion concept) <span class="tag">rem</span></span>
+      <div class="body">This is both the editor's UI concept (the horizontal scroll) AND a JSON value called <code>TimelineState</code> (<code>compositions/src/types.ts</code>) that's passed to <code>MainComposition</code> as <code>inputProps.timeline</code>.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Token (LLM) <span class="tag">ai</span></span>
+      <div class="body">A chunk of text (roughly 4 characters in English) that an LLM processes. "Hello world" ≈ 2 tokens. Most API providers charge by token. Long prompts with too much context can run into context-window token limits.</div>
+    </div>
+
+    <div class="letter-row">U</div>
+
+    <div class="term">
+      <span class="name">Upscaling <span class="tag">img</span><span class="tag">fx</span></span>
+      <div class="body">Increasing the resolution of an image or video. AI upscalers (Real-ESRGAN, Topaz, etc.) hallucinate plausible detail; traditional bicubic / Lanczos resamplers just blur.</div>
+    </div>
+
+    <div class="letter-row">V</div>
+
+    <div class="term">
+      <span class="name">VAE (Variational Autoencoder) <span class="tag">ai</span></span>
+      <div class="body">A neural-network architecture that compresses data into a small "latent" representation and decodes it back. Stable Diffusion uses a VAE for the image side of the pipeline.</div>
+    </div>
+
+    <div class="term">
+      <span class="name">Vite <span class="tag">web</span></span>
+      <div class="body">The dev server + bundler used by the client. Lightning-fast HMR (hot module replacement) is its killer feature for UI work.</div>
+    </div>
+
+    <div class="letter-row">W</div>
+
+    <div class="term">
+      <span class="name">WebCodecs <span class="tag">web</span><span class="tag">vid</span></span>
+      <div class="body">A modern browser API for hardware-accelerated codec access. Used by Remotion's renderer to decode video frames efficiently.</div>
+    </div>
+
+  </div>
+</section>
+
+</main>
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer class="wrap">
+  <p>
+    Remotion Video Editor — User Guide ·
+    Open this page directly in any browser, save it, share it.
+    No build step required.
+  </p>
+  <p style="margin-top:6px; font-size:12px;">
+    <a href="#quickstart">↑ Back to Quickstart</a>
+    ·
+    <a href="#glossary">↑ Back to Glossary</a>
+    ·
+    <a href="#">↑ Top</a>
+  </p>
+</footer>
+
+<script>
+  // ----------------------------------------------------------------
+  // Anchor links: clicking the "#" next to a section heading copies
+  // the deep link to the clipboard and shows a "copied!" ack.
+  // ----------------------------------------------------------------
+  document.querySelectorAll('section > h2 .anchor').forEach(function (a) {
+    a.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var url = a.getAttribute('href');
+      var abs = window.location.origin + window.location.pathname + url;
+      // Try clipboard API first, fall back to a hidden textarea.
+      var done = function () {
+        var old = a.textContent;
+        a.textContent = '✓ copied';
+        a.classList.add('copied');
+        setTimeout(function () {
+          a.textContent = old;
+          a.classList.remove('copied');
+        }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(abs).then(done).catch(function () {
+          legacyCopy(abs);
+          done();
+        });
+      } else {
+        legacyCopy(abs);
+        done();
+      }
+      window.history.replaceState(null, '', url);
+      window.scrollTo({ top: document.querySelector(url).offsetTop - 92, behavior: 'smooth' });
+    });
+  });
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  // ----------------------------------------------------------------
+  // Highlight the current section in the TOC while scrolling.
+  // ----------------------------------------------------------------
+  (function () {
+    var links = document.querySelectorAll('.toc a');
+    var byId = {};
+    links.forEach(function (a) {
+      byId[a.getAttribute('href').slice(1)] = a;
+    });
+    var sections = Array.from(document.querySelectorAll('main section'));
+    function update() {
+      var y = window.scrollY + 140;
+      var cur = null;
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].offsetTop <= y) cur = sections[i].id;
+      }
+      links.forEach(function (a) {
+        a.style.color = '';
+      });
+      if (cur && byId[cur]) byId[cur].style.color = 'var(--violet)';
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  })();
+
+  // ----------------------------------------------------------------
+  // Optional: print-friendly URL list for offline reference.
+  // Press '?' to print with all anchor links expanded.
+  // ----------------------------------------------------------------
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '?' && !e.target.matches('input, textarea')) {
+      e.preventDefault();
+      window.print();
+    }
+  });
+</script>
+
+</body>
+</html>
