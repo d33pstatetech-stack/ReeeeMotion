@@ -213,11 +213,39 @@ function Start-DevChild {
   $logPath = Join-Path $env:TEMP $logName
   if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
 
-  $proc = Start-Process -FilePath $npmExePath `
-    -ArgumentList 'run','dev' `
+  # Start-Process quirk this works around: PowerShell rejects `Start-Process`
+  # with `InvalidOperationException: ... 'RedirectStandardOutput' and
+  # 'RedirectStandardError' are same ...` whenever both stdout and stderr
+  # point at the same file. There is no native PowerShell analogue to
+  # bash's `> $log 2>&1` -- so we detour through
+  # `cmd.exe /c "<npm> run dev > $log 2>&1"`. `cmd.exe`'s own shell parser
+  # merges the streams BEFORE Start-Process's redirection layer is
+  # involved, satisfying the constraint trivially (we don't pass any
+  # -RedirectStandard* parameters here at all).
+  #
+  # Captured PID is `cmd.exe`'s, not `npm.cmd`'s, but cleanup still works
+  # because `taskkill /F /T /PID $ServerPid` walks the WHOLE job-object
+  # tree (cmd.exe -> npm.cmd -> node.exe -> tsx/vite children) atomically.
+  # Same reasoning the bash twin relies on with `kill -TERM -${pgid}` on
+  # the session-leader.
+  #
+  # Same merged-log-file semantic as the bash twin: both stdout and
+  # stderr land in $logPath, so `tail -f $env:TEMP/remotion-dev-*.log`
+  # from another terminal or the in-loop Start-LogTailer tailer both
+  # surface every line. PowerShell's auto-quoting of the embedded quoted
+  # paths in $cmdLine is harmless: cmd.exe's tokenizer strips the outer
+  # quotes after reconstructing argv.
+  #
+  # Note on file existence: $logPath is removed at function entry above
+  # the Start-Process call so cmd.exe's `>` truncation is a clean open
+  # (`> file` truncates). PS-side auto-quoting of paths with spaces
+  # (e.g. `C:\Program Files\nodejs\npm.cmd`) is handled correctly because
+  # the embedded `"` in $cmdLine becomes `\"` at the CreateProcess
+  # layer, which cmd.exe unescapes back to `"` during parsing.
+  $cmdLine = "`"$npmExePath`" run dev > `"$logPath`" 2>&1"
+  $proc = Start-Process -FilePath 'cmd.exe' `
+    -ArgumentList '/c', $cmdLine `
     -WorkingDirectory $WorkDir `
-    -RedirectStandardOutput $logPath `
-    -RedirectStandardError $logPath `
     -PassThru
   Write-Host "[dev.ps1] Starting $Label (port $Port) pid=$($proc.Id) in $WorkDir ..."
   return @{ pid = $proc.Id; logPath = $logPath; label = $Label; port = $Port }

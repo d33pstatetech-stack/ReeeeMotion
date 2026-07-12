@@ -258,6 +258,35 @@ try {
   }
   Assert ($psFields.Count   -ge 4) ('cross-file: _pid-manifest.ps1 emits: '   + ($psFields   -join ','))
   Assert ($bashFields.Count -ge 4) ('cross-file: _addpidmanifest.sh emits: ' + ($bashFields -join ','))
+
+  # ===========================================================
+  Section 'Regression: dev.ps1 Start-Process redirect-merging (no same-file redirect)'
+
+  # PS Start-Process rejects the call when -RedirectStandardOutput AND
+  # -RedirectStandardError point at the same file (InvalidOperationException).
+  # We work around it by passing `cmd.exe /c "<npm> run dev > $log 2>&1"`
+  # so cmd's own shell parser does the stream merge before the
+  # Start-Process layer ever sees the paths. After that workaround,
+  # dev.ps1 has NO -RedirectStandard* arguments at all -- assert that
+  # here so a future contributor who re-adds them (and inadvertently
+  # re-introduces the bug) is caught, because the existing dev.ps1
+  # arg-parsing tests (--help / -h / --bogus) exit before Start-DevChild
+  # is reached and so cannot catch this specific regression.
+  #
+  # Targeted regex: the original bug was a parameter pair
+  # `  -RedirectStandardOutput $logPath \`` followed by
+  # `  -RedirectStandardError $logPath \`` -- both pointing at the same
+  # variable. The regex anchors on PowerShell parameter syntax: a line
+  # starts with whitespace + `-Redirect*` + whitespace + `$variable`.
+  # Plain-text mentions in comments (e.g. "we don't pass any
+  # `-RedirectStandard*` parameters here") do NOT match, because they do
+  # not begin with `-` after whitespace -- this is what makes the
+  # "comment in dev.ps1 mentions the names" case a non-issue.
+  $dpContent = Get-Content -LiteralPath (Join-Path $scriptsDir 'dev.ps1') -Raw
+  $dpStdouter = @($dpContent -split "`n" | Where-Object { $_ -match '^\s+-RedirectStandardOutput\s+\$\S+' }).Count
+  $dpStderrer = @($dpContent -split "`n" | Where-Object { $_ -match '^\s+-RedirectStandardError\s+\$\S+' }).Count
+  Assert ($dpStdouter -eq 0) ('dev.ps1: no `-RedirectStandardOutput $var` parameter patterns (cmd.exe 2>&1 wrapper used): found ' + $dpStdouter + ' lines')
+  Assert ($dpStderrer -eq 0) ('dev.ps1: no `-RedirectStandardError $var` parameter patterns (cmd.exe 2>&1 wrapper used): found ' + $dpStderrer + ' lines')
 }
 finally {
   if (Test-Path -LiteralPath $tmpRoot) {
