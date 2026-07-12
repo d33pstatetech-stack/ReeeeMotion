@@ -25,8 +25,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Job name MUST stay "test-pwsh" -- it's a required branch-protection
+  # status check context on main. Renaming would break the merge gate.
   test-pwsh:
-    name: PowerShell launchers smoke (zero-dep)
+    name: test-pwsh
     runs-on: ubuntu-22.04
     timeout-minutes: 5
 

@@ -18,8 +18,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Job name MUST stay "verify" -- it's a required branch-protection
+  # status check context on main. Renaming would break the merge gate.
   verify:
-    name: typecheck + vitest (parallel)
+    name: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Each per-package node_modules is cached separately because the repo
