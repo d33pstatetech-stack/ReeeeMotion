@@ -79,11 +79,21 @@ try {
 
   . $helperPath
 
-  # Get-CanonicalizedPath
-  $canon = Get-CanonicalizedPath -Path 'E:\Users\Foo\MixedCase\'
-  Assert ($canon -eq 'e:/users/foo/mixedcase') 'Get-CanonicalizedPath: backslash + mixed case + trailing slash -> canonicalized'
-  $canon = Get-CanonicalizedPath -Path 'C:/Users/Bar/proj/'
-  Assert ($canon -eq 'c:/users/bar/proj') 'Get-CanonicalizedPath: forward-slash input preserved but case-folded'
+  # Get-CanonicalizedPath. The canonicalization function is platform-
+  # neutral; only the TEST INPUTS need to be OS-flavored. Hardcoded
+  # Windows drive letters (E:\Users\Foo\...) fail on linux pwsh because
+  # [System.IO.Path]::GetFullPath treats 'E:\' as a relative path there
+  # and prepends CWD, so the assertion against the exact string
+  # 'e:/users/foo/mixedcase' would evaluate to $false. Swap to linux-
+  # style absolute paths on non-Windows runners.
+  $p1 = if ($_isWin) { 'E:\Users\Foo\MixedCase\' } else { '/Users/Foo/MixedCase/' }
+  $e1 = if ($_isWin) { 'e:/users/foo/mixedcase' } else { '/users/foo/mixedcase' }
+  $canon = Get-CanonicalizedPath -Path $p1
+  Assert ($canon -eq $e1) 'Get-CanonicalizedPath: backslash + mixed case + trailing slash -> canonicalized'
+  $p2 = if ($_isWin) { 'C:/Users/Bar/proj/' } else { '/Users/Bar/proj/' }
+  $e2 = if ($_isWin) { 'c:/users/bar/proj' } else { '/users/bar/proj' }
+  $canon = Get-CanonicalizedPath -Path $p2
+  Assert ($canon -eq $e2) 'Get-CanonicalizedPath: forward-slash input preserved but case-folded'
 
   # Write-Manifest roundtrip
   $projADir = Join-Path $tmpRoot 'projectA'
