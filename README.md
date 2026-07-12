@@ -76,6 +76,30 @@ The script also keeps the two ports clean — if `:3001` or `:5173` is already
 busy when you start, it refuses to launch and tells you how to free them,
 rather than letting Vite crash with a confusing `strictPort` error.
 
+### One-click GUI launchers (no terminal needed)
+
+For users who would rather double-click an icon than run from a terminal,
+the project ships platform-native launchers that auto-detect the best
+available shell:
+
+| OS | File | How to launch |
+|---|---|---|
+| Windows | `start.cmd` (or `start.ps1`) | Double-click in Explorer. `start.cmd` auto-detects `bash` (Git for Windows) first and falls back to PowerShell — so a Windows user without Git-Bash still gets a working launcher out of the box. |
+| macOS   | `start.command`        | Double-click in Finder. First time, macOS Gatekeeper will block it (right-click → Open → confirm); subsequent double-clicks run immediately. |
+| Linux   | `bash start.sh`        | From a terminal: `bash start.sh` (or `./start.sh` after `chmod +x start.sh`). |
+
+For the deep-dive — including the `--own` manifest preflight (cross-language
+JSON-compatible with PowerShell), process cleanup via `setsid` + Windows
+job-object tree, full PowerShell-native invocation notes
+(`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev.ps1`),
+and a troubleshooting table covering the most common launch failures —
+see **[`README_GUI_LAUNCHER.md`](README_GUI_LAUNCHER.md)**.
+
+A lightweight zero-dep smoke test for the new PowerShell launchers is
+wired in via `.github/workflows/test-pwsh.yml` and runs alongside the
+existing [`verify.yml`](.github/workflows/verify.yml) on every push + PR
+to `main`. Locally it is `npm run test:pwsh`.
+
 ### Smoke-testing the export pipeline (`npm run smoke:export`)
 
 For a full end-to-end MP4 check that doesn't require opening the editor,

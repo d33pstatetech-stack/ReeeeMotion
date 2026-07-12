@@ -1,0 +1,96 @@
+# .github/workflows/verify-docker.yml
+#
+# Single job that builds both Docker images, boots the compose stack with
+# `docker compose up -d --wait`, curl-verifies /api/health and / once
+# healthy, and tears down with `docker compose down -v` (drops named volumes
+# so a broken previous run can't cache-checkpoint state).
+#
+# Triggered manually (workflow_dispatch) so we don't run on every commit;
+# the per-package `verify.yml` already runs on every push + PR and is the
+# canonical smoke gate. This workflow is for catching layer-cache / COPY
+# context / nginx-proxy drift that only shows up with a real container
+# stack — it's expensive enough (~3min cold) that running it on every push
+# would burn CI minutes for low-signal output.
+
+name: verify-docker
+
+on:
+  # Manual trigger from the Actions tab.
+  workflow_dispatch:
+  # Auto-run weekly so any silent upstream drift gets caught eventually.
+  schedule:
+    - cron: "0 6 * * 1"   # 06:00 UTC every Monday
+
+jobs:
+  compose-boot:
+    name: build + boot + curl + tear down
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # BuildKit + docker compose v2 + the GHA build cache.
+      - uses: docker/setup-buildx-action@v3
+
+      # Build only via `docker compose build` (faster than building both
+      # services separately for the happy path). Cache layers via GHA so
+      # subsequent runs only rebuild the changed layers.
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: false
+          tags: remotion-editor-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build client image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.client
+          push: false
+          tags: remotion-editor-client:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Make the locally-built images visible to `docker compose up` under
+      # the canonical image names the compose file references.
+      - name: Tag images for compose
+        run: |
+          docker tag remotion-editor-server:ci remotion-editor-server:local
+          docker tag remotion-editor-client:ci remotion-editor-client:local
+
+      # Fail-fast on YAML syntax (catches typos before the slow `up` step).
+      - name: Validate compose file syntax
+        run: docker compose config --quiet
+
+      # Boot. `--wait` blocks until the server's healthcheck reports healthy
+      # AND the client's `depends_on: service_healthy` so we don't curl
+      # before nginx is actually serving.
+      - name: Boot stack
+        run: docker compose up -d --wait
+
+      - name: Curl /api/health
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsS http://localhost:3001/api/health; then
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Curl /
+        run: |
+          curl -fsS http://localhost:5173/ | head -c 4096
+          echo
+          # Sanity: response should contain the SPA's <div id="root"> marker.
+          curl -fsS http://localhost:5173/ | grep -q '<div id="root">' || \
+            (echo "SPA root marker missing" && exit 1)
+
+      # Tear down with -v to drop the named volumes; otherwise a previous
+      # broken run can leave artifacts that mask real failures.
+      - name: Tear down (drop volumes)
+        if: always()
+        run: docker compose down -v --remove-orphans

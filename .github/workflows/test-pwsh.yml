@@ -1,0 +1,50 @@
+# GitHub Actions: smoke-test the PowerShell launchers
+#
+# Covers scripts/_pid-manifest.ps1, scripts/cleanup-ports.ps1,
+# scripts/dev.ps1, and the harness scripts/test-pwsh.ps1 itself.
+# Pairs with the existing verify.yml (which covers client + server
+# typecheck + vitest). Runs on every push + PR to main.
+#
+# PowerShell 7.x on linux is the most production-representative
+# target -- pwsh is also what macOS + WSL end users install.
+#
+# Exit 0 = 40+ smoke asserts pass; nonzero = N failures.
+
+name: test-pwsh
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run when a new push hits the same branch.
+# (Matches verify.yml so the two workflows cancel consistently.)
+concurrency:
+  group: test-pwsh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-pwsh:
+    name: PowerShell launchers smoke (zero-dep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install PowerShell 7.4 on the linux runner. pwsh isn't on
+      # ubuntu-latest by default, so we install it explicitly. Pin to
+      # 7.4 to match what end-users typically install today (7.5+
+      # should also work); the PS scripts target PS 5.1+ so any 7.x
+      # is a superset, not a regression.
+      - name: Install PowerShell 7.4
+        uses: microsoft/powershell@v1
+        with:
+          pwsh-version: '7.4'
+
+      # Run the zero-dep PS smoke harness. Exit 0 = all pass.
+      # Uses the pwsh shell declared above via microsoft/powershell@v1.
+      - name: Run scripts/test-pwsh.ps1
+        shell: pwsh
+        run: ./scripts/test-pwsh.ps1

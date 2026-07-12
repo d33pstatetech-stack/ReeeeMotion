@@ -1,0 +1,86 @@
+# .github/workflows/release-draft.yml
+#
+# Runs ONLY on tag pushes matching `v*` (e.g. v0.2.0, v1.0.0).
+# Single job:
+#   1. check-out the repo with full git history (fetch-depth: 0 so
+#      `git log` can walk back to the previous tag),
+#   2. derive the PREVIOUS semver-style tag (everything in `git tag
+#      --sort=-v:refname` EXCEPT the tag we just pushed), and fall back
+#      to "all commits since inception" if no previous tag exists,
+#   3. run `node scripts/release-notes.mjs --since <prev-tag> --until
+#      <new-tag> --md` and pipe the markdown output into RELEASE_NOTES.md,
+#   4. upload RELEASE_NOTES.md as a downloadable workflow artifact.
+#
+# IMPORTANT — the `--since` / `--until` argument order is the easier-to-
+# flip bug in this kind of workflow. `git push <new-tag>` makes the tag
+# ref point at HEAD, so `--since <new-tag> --until HEAD` would always
+# produce an empty range and ship a 0-commit RELEASE_NOTES.md. The trick
+# is: --until IS the new tag (= HEAD), and --since is the previous
+# tag captured by omitting the just-pushed one from `git tag --sort=
+# -v:refname`.
+#
+# Deliberately does NOT depend on `verify.yml` or `verify-docker.yml` —
+# the release-ready ship is gated manually by the maintainer pushing the
+# tag, so a release draft should run even if unrelated CI is red.
+
+name: release-draft
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "v*.*"
+      - "v*.*.*"
+
+jobs:
+  release-notes:
+    name: generate + upload release notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `git log` can walk between releases; a shallow
+          # clone would only see the tag commit itself.
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Derive the previous tag by listing all semver-ish tags newest-
+      # first and excluding the tag we just pushed (`github.ref_name`
+      # is the tag name, e.g. `v0.2.0`). If no previous tag exists
+      # (first release), emit no --since argument so the script treats
+      # the range as "all commits into HEAD" and exits cleanly with
+      # the full changelog from inception.
+      - name: Generate release notes (markdown)
+        shell: bash
+        env:
+          NEW_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          PREV_TAG="$(git tag --sort=-v:refname | grep -v "^${NEW_TAG}$" | head -n1 || true)"
+          echo "NEW_TAG=${NEW_TAG}"
+          echo "PREV_TAG=${PREV_TAG:-<none>}"
+          if [ -n "${PREV_TAG}" ]; then
+            SINCE_ARGS=(--since "${PREV_TAG}")
+          else
+            SINCE_ARGS=()
+          fi
+          node scripts/release-notes.mjs \
+            "${SINCE_ARGS[@]}" \
+            --until "${NEW_TAG}" \
+            --md > RELEASE_NOTES.md
+          echo "----- RELEASE_NOTES.md (first 60 lines) -----"
+          head -n 60 RELEASE_NOTES.md
+          echo "-----------------------------------------------"
+
+      - name: Upload RELEASE_NOTES.md
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 90

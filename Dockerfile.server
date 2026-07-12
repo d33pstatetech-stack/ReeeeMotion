@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+# ---------- Build stage ----------
+FROM node:20-bookworm-slim AS buildrc
+
+WORKDIR /app/server
+
+# Install once with mounts so the cache layer survives source edits.
+COPY server/package.json server/package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
+
+COPY server/tsconfig.json ./
+COPY server/src ./src
+COPY compositions ../compositions   # Source the bundler will pick up at runtime.
+
+RUN npm run build && \
+    npm prune --omit=dev
+
+# ---------- Runtime stage ----------
+FROM node:20-bookworm-slim
+
+ENV NODE_ENV=production \
+    PORT=3001 \
+    PUBLIC_HOST=http://localhost:3001 \
+    COMPOSITIONS_ENTRY=/app/compositions/src/index.ts
+
+WORKDIR /app/server
+COPY --from=buildrc /app/server/dist ./dist
+COPY --from=buildrc /app/server/node_modules ./node_modules
+COPY --from=buildrc /app/compositions /app/compositions
+
+EXPOSE 3001
+
+# uploads/ and renders/ are bind-mounted from the host in docker-compose.yml
+# for dev. In production, mount a persistent volume here.
+RUN mkdir -p /app/server/uploads /app/server/renders
+
+CMD ["node", "dist/server/src/index.js"]

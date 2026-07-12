@@ -1,0 +1,35 @@
+# Exclude dependency installs from client + server + compositions — Docker
+# re-installs per-package inside each image, and the host's node_modules
+# trees (especially with native binary deps) just bloat the build context.
+node_modules
+client/node_modules
+server/node_modules
+compositions/node_modules
+
+# Build outputs (server's tsc → dist; client's vite → dist) — recreated
+# inside the image. Mounting them from the host only matters for dev mode.
+dist
+build
+.tsbuildinfo
+
+# Editor + git + secrets.
+.git
+.gitignore
+.idea
+.vscode
+*.log
+.DS_Store
+.env
+.env.local
+.env.*
+!.env.example
+
+# The Docker / CI config files themselves don't need to be COPYed into
+# runtime images.
+.dockerignore
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+docker-compose.*.yml
+.github
+verify.mjs

@@ -1,0 +1,85 @@
+# GitHub Actions: run `npm run verify` on every push + PR to main.
+#
+# verify.mjs fans out 3 parallel tasks — client typecheck, client vitest,
+# server typecheck — and exits non-zero on any failure. Single job keeps
+# the failure surface to one log; PARALLEL=true means a fast feedback
+# loop on cold caches (~5min) and faster on warm caches (~1min).
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run when a new push hits the same branch.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + vitest (parallel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Each per-package node_modules is cached separately because the repo
+    # is intentionally NOT a workspace (each package is its own scope).
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Cache layered per-package so a cached client doesn't bust server's.
+      - name: Cache client/node_modules
+        uses: actions/cache@v4
+        with:
+          path: client/node_modules
+          key: client-npm-${{ runner.os }}-${{ hashFiles('client/package.json') }}
+          restore-keys: |
+            client-npm-${{ runner.os }}-
+
+      - name: Cache server/node_modules
+        uses: actions/cache@v4
+        with:
+          path: server/node_modules
+          key: server-npm-${{ runner.os }}-${{ hashFiles('server/package.json') }}
+          restore-keys: |
+            server-npm-${{ runner.os }}-
+
+      - name: Cache compositions/node_modules
+        uses: actions/cache@v4
+        with:
+          path: compositions/node_modules
+          key: comps-npm-${{ runner.os }}-${{ hashFiles('compositions/package.json') }}
+          restore-keys: |
+            comps-npm-${{ runner.os }}-
+
+      - name: Install client deps
+        if: hashFiles('client/package-lock.json') != ''
+        run: npm ci --no-audit --no-fund
+        working-directory: client
+      - name: Install client deps (no lockfile fallback)
+        if: hashFiles('client/package-lock.json') == ''
+        run: npm install --no-audit --no-fund
+        working-directory: client
+
+      - name: Install server deps
+        if: hashFiles('server/package-lock.json') != ''
+        run: npm ci --no-audit --no-fund
+        working-directory: server
+      - name: Install server deps (no lockfile fallback)
+        if: hashFiles('server/package-lock.json') == ''
+        run: npm install --no-audit --no-fund
+        working-directory: server
+
+      - name: Install compositions deps (transitive typecheck only)
+        run: npm install --no-audit --no-fund
+        working-directory: compositions
+
+      - name: Run verify (parallel typecheck + vitest across packages)
+        run: node verify.mjs
+        env:
+          # vitest + tsc surface ANSI in CI without this; not strictly needed
+          NO_COLOR: '0'

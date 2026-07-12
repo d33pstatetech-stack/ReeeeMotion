@@ -69,11 +69,8 @@ Thumbs.db
 # ---------- git + github -----------------------------------------------
 .git/
 
-# ---------- Docker / CI config itself ---------------------------------
-.dockerignore
-Dockerfile
-Dockerfile.*
-docker-compose.yml
-docker-compose.*.yml
-.github/
-verify.mjs
+# NOTE: a previous version of this file listed .dockerignore, Dockerfile*,
+#       docker-compose*, .github/, and verify.mjs as ignore patterns.
+#       That was incorrect -- they're legitimate project files (Docker
+#       build configs, root verify script, CI workflows under
+#       .github/workflows/) and must be tracked. Removed in this commit.
