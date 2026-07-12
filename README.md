@@ -1,5 +1,11 @@
 # Remotion Video Editor (Local)
 
+[![CI verify](https://github.com/d33pstatetech-stack/ReeeeMotion/actions/workflows/verify.yml/badge.svg)](https://github.com/d33pstatetech-stack/ReeeeMotion/actions/workflows/verify.yml)
+[![CI test-pwsh](https://github.com/d33pstatetech-stack/ReeeeMotion/actions/workflows/test-pwsh.yml/badge.svg)](https://github.com/d33pstatetech-stack/ReeeeMotion/actions/workflows/test-pwsh.yml)
+[![License: Apache-2.0](https://img.shields.io/github/license/d33pstatetech-stack/ReeeeMotion)](./LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/d33pstatetech-stack/ReeeeMotion)](https://github.com/d33pstatetech-stack/ReeeeMotion/releases/latest)
+[![GitHub topics](https://img.shields.io/github/repo-topics/d33pstatetech-stack/ReeeeMotion)](https://github.com/d33pstatetech-stack/ReeeeMotion)
+
 A fully local, free, and open-source web-based video editor. Drag clips and
 images onto a timeline, tweak Remotion variables (scale, opacity, rotation,
 transitions, spring entrances), and export the final video as MP4 – all from a
@@ -215,3 +221,36 @@ The app ships a self-contained, single-page user guide for content creators:
 `main`. Each per-package `node_modules` is cached separately (no workspaces).
 Push to `main` cancels any in-flight runs on the same branch via a
 `concurrency` group.
+
+`.github/workflows/test-pwsh.yml` runs the zero-dep PowerShell-launcher
+smoke harness (`scripts/test-pwsh.ps1`) on every push + PR — 40+ asserts
+covering `_pid-manifest.ps1` roundtrips, `cleanup-ports.ps1` arg parsing,
+`dev.ps1` exit codes, and the cross-language manifest format. Required CI
+checks for merging into `main` are `verify` + `test-pwsh`.
+
+`.github/workflows/verify-docker.yml` runs the full `docker compose`
+build + boot + curl + teardown cycle on a weekly cron (cycles Monday
+06:00 UTC) or via manual dispatch. Catches layer-cache / COPY-context /
+nginx-proxy drift that shows up only with a real container stack.
+
+`.github/workflows/release-draft.yml` auto-generates a Markdown
+`RELEASE_NOTES.md` artifact on every `v*` tag push (Conventional Commits
+sectioning included).
+
+## Contributing
+
+See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for repo layout, dev
+workflow, Conventional-Commits spec, tag-driven release flow, and the
+SHA-pinning convention we use for GitHub Actions.
+
+Issue templates live at `.github/ISSUE_TEMPLATE/{bug,feature}.md`;
+PR template at `.github/PULL_REQUEST_TEMPLATE.md`. Auto-assigned owners
+are in **[CODEOWNERS](./CODEOWNERS)** (currently the
+`@d33pstatetech-stack` org). Dependency updates — both `npm` and
+`github-actions` — are auto-PR'd weekly by Dependabot (config in
+`.github/dependabot.yml`).
+
+## License
+
+Licensed under the **Apache License, Version 2.0** — see
+**[LICENSE](./LICENSE)** for the full text + NOTICE + patent-grant clause.

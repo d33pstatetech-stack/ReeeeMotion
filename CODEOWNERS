@@ -1,0 +1,31 @@
+# CODEOWNERS -- GitHub auto-assigns reviewers for any PR that touches
+# files matching a pattern below. Keep the default-owner rule first so
+# new files inherit it; specific overrides go BELOW.
+#
+# Pattern syntax: <pattern>  <owner1> [<owner2> ...]
+#   - Names must be GitHub usernames or org names (no @ prefix).
+#   - Patterns are relative to repo root unless they start with /.
+#   - One owner per line (we only have one maintainer org as of v0.1.1).
+#
+# Maintainer: @d33pstatetech-stack (sole owner of the org at this time).
+
+# Default: every path -> maintainer org.
+# Per GitHub's CODEOWNERS spec, a bare `*` (no slash) is the canonical
+# "match every file in the repo" pattern. The slash-anchored variants
+# (`/`, `/*`, `/**`) have narrower matching rules -- `/*` only matches
+# the immediate root contents, not nested paths. Stick with bare `*`
+# for the default. Specific overrides below TAKE PRECEDENCE over this
+# default (last-matching rule wins per GitHub).
+*                                               @d33pstatetech-stack
+
+# Workflows: org owns them AND gets pinged first for CI changes.
+/.github/workflows/                              @d33pstatetech-stack
+
+# Server-side render pipeline: any change here affects exported MP4s.
+/server/                                         @d33pstatetech-stack
+
+# Composition source: any change here affects every rendered frame.
+/compositions/                                   @d33pstatetech-stack
+
+# LICENSE: stay under Apache-2.0; treats changes as breaking.
+/LICENSE                                         @d33pstatetech-stack

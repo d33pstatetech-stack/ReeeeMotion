@@ -31,13 +31,20 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      # `uses:` SHA-pin convention: see verify.yml header. The single
+      # exception is microsoft/powershell below -- the upstream repo's
+      # v1 ref is a moving branch that doesn't map to a discoverable
+      # immutable tag via the unauthenticated GitHub HTTP API. We
+      # therefore leave @v1 in place and rely on Dependabot
+      # (.github/dependabot.yml) to surface version drift.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # pin: v4.3.1
 
       # Install PowerShell 7.4 on the linux runner. pwsh isn't on
       # ubuntu-latest by default, so we install it explicitly. Pin to
       # 7.4 to match what end-users typically install today (7.5+
       # should also work); the PS scripts target PS 5.1+ so any 7.x
       # is a superset, not a regression.
+      # NOTE: NOT SHA-pinned -- see comment block above for rationale.
       - name: Install PowerShell 7.4
         uses: microsoft/powershell@v1
         with:

@@ -38,14 +38,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      # SHA-pinned `uses:` refs -- see verify.yml header for rationale.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # pin: v4.3.1
         with:
           # Full history so `git log` can walk between releases; a shallow
           # clone would only see the tag commit itself.
           fetch-depth: 0
 
       - name: Setup Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # pin: v4.4.0
         with:
           node-version: "20"
 
@@ -78,7 +79,7 @@ jobs:
           echo "-----------------------------------------------"
 
       - name: Upload RELEASE_NOTES.md
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # pin: v4.6.2
         with:
           name: release-notes
           path: RELEASE_NOTES.md

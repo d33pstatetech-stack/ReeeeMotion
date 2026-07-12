@@ -1,0 +1,106 @@
+# Dependabot configuration.
+#
+# Two ecosystems:
+#   1. github-actions -- weekly scan + auto-PR for the GitHub Actions we
+#      use in .github/workflows/*.yml. Our workflow YAMLs pin every
+#      `uses:` ref to a commit SHA (see commit messages for SHA-pinning
+#      rationale), so Dependabot will surface both upstream tag-bumps
+#      AND SHA-pinning PRs when a tagged release shifts the resolved
+#      SHA. Reviewers MUST re-run `npm run verify` + `npm run test:pwsh`
+#      on the resulting PR before merging -- SHA bumps can move behavior
+#      in subtle ways even when the semver is a patch bump.
+#
+#   2. npm -- weekly scan for each of the four package directories
+#      (root, client, server, compositions). The root declares
+#      electron + electron-builder as devDependencies only; the npm
+#      ecosystem scans root + the per-package package.json files
+#      separately so a server bump doesn't bust the client cache.
+#
+# `cooldown` is set on npm so Dependabot waits 7 days after a new
+# version is released before opening an update PR. This avoids being
+# the canary for every NPM release-day regression.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      prefix-development: "ci(dev)"
+      include: "scope"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "build"
+      prefix-development: "build(dev)"
+      include: "scope"
+    cooldown:
+      npm: 7
+
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:35"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+      - "client"
+    commit-message:
+      prefix: "build(client)"
+      prefix-development: "build(client,dev)"
+    cooldown:
+      npm: 7
+
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:40"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+      - "server"
+    commit-message:
+      prefix: "build(server)"
+      prefix-development: "build(server,dev)"
+    cooldown:
+      npm: 7
+
+  - package-ecosystem: "npm"
+    directory: "/compositions"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:45"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+      - "compositions"
+    commit-message:
+      prefix: "build(compositions)"
+      prefix-development: "build(compositions,dev)"
+    cooldown:
+      npm: 7
