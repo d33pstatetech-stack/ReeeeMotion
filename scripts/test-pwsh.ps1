@@ -360,10 +360,9 @@ try {
   # with a wrapped body, and verify a spaced path token survives cmd's
   # parser end-to-end. We use `echo` (a cmd builtin) with a forward-
   # slash path that contains a space:
-  #   - echo is a deterministic cmd builtin on every Windows host (the
-  #     prior version tried to execute a non-existent exe, but cmd's
-  #     "The system cannot find the path specified." error does NOT
-  #     include the path, so the IndexOf check would fail).
+  #   - echo is a deterministic cmd builtin on every Windows host (its
+  #     output is the spaced path verbatim, so the IndexOf check is
+  #     reliable across cmd versions that differ in error wording).
   #   - forward slashes sidestep cmd's backslash-handling quirk: on
   #     this host, echo of `C:\Program Files\TEST_MARKER` returns
   #     `C:\Program FilesTEST_MARKER` (a single backslash is eaten
@@ -372,8 +371,9 @@ try {
   # What this proves: (1) PS's Start-Process single-string ArgumentList
   # correctly passes the wrap+body to cmd's CreateProcess layer, (2)
   # /D /S /C deterministically strips the first and last quote (the
-  # wrap), (3) the inner spaced path survives the strip and is emitted
-  # by echo as-is. Gated to Windows because cmd.exe is Windows-only.
+  # wrap), and (3) the inner spaced path survives the strip and is
+  # emitted by echo as-is. Gated to Windows because cmd.exe is
+  # Windows-only.
   if ($_isWin) {
     $liveCmdLine = '""' + 'echo C:/Program Files/TEST_MARKER' + '""'
     $liveOut = cmd /D /S /C $liveCmdLine 2>&1
