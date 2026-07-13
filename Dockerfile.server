@@ -11,7 +11,8 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY server/tsconfig.json ./
 COPY server/src ./src
-COPY compositions ../compositions   # Source the bundler will pick up at runtime.
+# Source the bundler will pick up at runtime.
+COPY compositions ../compositions
 
 RUN npm run build && \
     npm prune --omit=dev
