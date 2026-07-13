@@ -330,7 +330,7 @@ try {
   # "Program Files"). The fix wraps the body in `""` and uses /D /S /C
   # + a single-string ArgumentList. The smoke regression guard below
   # asserts the broken array form is gone.
-  $dpOldArrayC = @($dpContent -split "`n" | Where-Object { $_ -match "^\s*-ArgumentList\s+'/c'\s*,\s*\$cmdLine\b" }).Count
+  $dpOldArrayC = @($dpContent -split "`n" | Where-Object { $_ -match '^\s*-ArgumentList\s+''/c''\s*,\s*$cmdLine\b' }).Count
   Assert ($dpOldArrayC -eq 0) ('dev.ps1: no array-form `ArgumentList /c, $cmdLine` (cmd.exe /D /S /C + single-string ArgumentList required for paths with spaces): found ' + $dpOldArrayC + ' lines')
   # Single-quoted regex string: in PS, \" is NOT a valid escape inside a
   # double-quoted string (the escape char is the backtick, and " is
