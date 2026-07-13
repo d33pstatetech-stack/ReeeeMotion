@@ -356,6 +356,72 @@ try {
   $dpSingleStr = @($dpContent -split "`n" | Where-Object { $_ -match '^\s*-ArgumentList\s+\(''/D\s*/S\s*/C\s*''\s*\+\s*\$cmdLine\)' }).Count
   Assert ($dpSingleStr -ge 1) ('dev.ps1: present cmd.exe /D /S /C + single-string ArgumentList wrap: found ' + $dpSingleStr + ' lines')
 
+  # ===========================================================
+  Section 'AST lint: prevent PR #4 bug class from re-introducing (PS DoubleQuoted strings with literal \$<identifier>)'
+
+  # Walk every project .ps1 file (excluding node_modules / .git / .dev test
+  # cruft) via PowerShell AST. The bug class PR #4 fixed: a regex string
+  # passed to `-match` (or similar) as a PS DoubleQuoted string literal
+  # containing `\$<identifier>` tokens. PS uses BACKTICK for escape in
+  # DoubleQuoted strings (NOT backslash), so `\\` is two LITERAL backslash
+  # chars (NOT an escape), and `\$x` is backslash + variable interpolation
+  # -- silently a no-op regex guard when $x is undefined in the calling
+  # scope (test-pwsh.ps1's `$cmdLine` was the original bug: test-scope
+  # parameter, never set, so the guard silently PASSED for ANY dev.ps1
+  # content because the resolved regex `^\\s*-ArgumentList\\s+'/c'\\s*,\\s\\\\b`
+  # couldn't match any line of source). The fix per PR #4 was to convert
+  # the regex string to SINGLE-quoted form (`\\$cmdLine` survives as the
+  # 9-char literal `\\$cmdLine`; .NET regex sees `\$cmdLine` = literal
+  # `$cmdLine`).
+  #
+  # This AST walk flags the bug-prone DoubleQuoted form automatically so any
+  # future regression is caught at test time rather than discovered via
+  # reviewer. SingleQuoted / BareWord / Here-string constants are NOT flagged
+  # because they don't have this bug (single-quoted and here-string don't
+  # interpolate variables; BareWord is a special-case syntactic form).
+  $astLintHits = & {
+    $bag = @()
+    $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    Get-ChildItem -Path $root -Filter '*.ps1' -Recurse -File |
+      Where-Object {
+        ($_.FullName -notmatch '[\\/]node_modules[\\/]') -and
+        ($_.FullName -notmatch '[\\/]\.git[\\/]') -and
+        ($_.FullName -notmatch '[\\/]\.dev[\\/]')
+      } |
+      ForEach-Object {
+        $file = $_
+        $tok = $null; $err = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tok, [ref]$err)
+        if ($err.Count -gt 0) {
+          Write-Host ('  [warn] AST parse errors in {0}; lint skipped for this file' -f $file.Name) -ForegroundColor Yellow
+          return
+        }
+        $ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+            $n.StringConstantType -eq 'DoubleQuoted' -and
+            $n.Value -match '\\\$[A-Za-z_][A-Za-z0-9_]*'
+          }, $true) |
+          ForEach-Object {
+            $bag += [pscustomobject]@{
+              File  = $file.Name
+              Line  = $_.Extent.StartLineNumber
+              Value = $_.Value
+            }
+          }
+      }
+    $bag
+  }
+  $astLintCount = @($astLintHits).Count
+  $astLintDetail = if ($astLintCount -gt 0) {
+    ($astLintHits | ForEach-Object {
+      $v = $_.Value
+      if ($v.Length -gt 80) { $v = $v.Substring(0, 80) + '...' }
+      ('  - {0}:{1}: value={2}' -f $_.File, $_.Line, $v)
+    }) -join "`n"
+  } else { '' }
+  Assert ($astLintCount -eq 0) ('AST lint: no PS DoubleQuoted strings with literal \$<identifier> pattern in project .ps1 files (bug class fixed by PR #4): found ' + $astLintCount + ' hits' + ($(if ($astLintCount -gt 0) { "`n" + $astLintDetail } else { '' })))
+
   # Live round-trip guard for the Codex P1: actually invoke cmd /D /S /C
   # with a wrapped body, and verify a spaced path token survives cmd's
   # parser end-to-end. We use `echo` (a cmd builtin) with a forward-
