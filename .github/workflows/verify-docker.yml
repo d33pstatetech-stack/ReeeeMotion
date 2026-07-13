@@ -26,20 +26,6 @@ jobs:
     name: build + boot + curl + tear down
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # Cold-start cache flake resilience. The first-ever weekly scheduled run
-    # (run 29239463041 on 2026-07-13, head_sha 2d00194) failed in 18s with
-    # `failed to compute cache key: failed to calculate checksum of ref
-    # ... "/will": not found` -- the buildx v6.19.2 inline-cache
-    # reconciliation chokes when `cache-from: type=gha` has nothing to
-    # import on a brand-new workflow. Once any successful run populates the
-    # cache, subsequent weekly runs are warm and green. Idempotent job-
-    # level retry is the cheapest fix: a re-run gets a fresh attempt at the
-    # cache import, and the build itself (docker compose build) is fully
-    # deterministic. We do NOT need to retry cancelled runs (default
-    # behavior), and 3 total attempts = initial + 2 retries is enough
-    # headroom for the cold-start class without burning CI minutes.
-    retry:
-      max-attempts: 3
     steps:
       # SHA-pinned `uses:` refs -- see verify.yml header for rationale.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # pin: v4.3.1
@@ -47,10 +33,34 @@ jobs:
       # BuildKit + docker compose v2 + the GHA build cache.
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # pin: v3.12.0
 
-      # Build only via `docker compose build` (faster than building both
-      # services separately for the happy path). Cache layers via GHA so
-      # subsequent runs only rebuild the changed layers.
+      # Cold-start cache flake resilience (replaces PR #8's broken
+      # `retry: max-attempts: 3` job-level block, which the GHA dispatch
+      # API rejected with 422 "Unexpected value 'retry'" -- `retry:` is
+      # not in the GHA job-level YAML schema, despite being a documented
+      # GitLab CI / Buildkite construct). The approach is now:
+      # `continue-on-error: true` on the initial build step so a failure
+      # does not abort the job, plus a SIBLING retry step gated by
+      # `if: steps.<id>.outcome == 'failure'` that re-runs the same build
+      # with identical args. `docker compose build` is fully idempotent
+      # given identical inputs + cache, so the retry is safe. Two total
+      # attempts per image (initial + 1 retry) is enough for the known
+      # cold-cache class; this would need revisiting only if a second
+      # distinct failure mode surfaces that the retry cannot absorb.
+
       - name: Build server image
+        id: build_server
+        continue-on-error: true
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # pin: v6.19.2
+        with:
+          context: .
+          file: Dockerfile.server
+          push: false
+          tags: remotion-editor-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build server image (retry on cold-cache flake)
+        if: steps.build_server.outcome == 'failure'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # pin: v6.19.2
         with:
           context: .
@@ -61,6 +71,19 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build client image
+        id: build_client
+        continue-on-error: true
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # pin: v6.19.2
+        with:
+          context: .
+          file: Dockerfile.client
+          push: false
+          tags: remotion-editor-client:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build client image (retry on cold-cache flake)
+        if: steps.build_client.outcome == 'failure'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # pin: v6.19.2
         with:
           context: .
