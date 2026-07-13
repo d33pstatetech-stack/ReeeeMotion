@@ -26,6 +26,20 @@ jobs:
     name: build + boot + curl + tear down
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Cold-start cache flake resilience. The first-ever weekly scheduled run
+    # (run 29239463041 on 2026-07-13, head_sha 2d00194) failed in 18s with
+    # `failed to compute cache key: failed to calculate checksum of ref
+    # ... "/will": not found` -- the buildx v6.19.2 inline-cache
+    # reconciliation chokes when `cache-from: type=gha` has nothing to
+    # import on a brand-new workflow. Once any successful run populates the
+    # cache, subsequent weekly runs are warm and green. Idempotent job-
+    # level retry is the cheapest fix: a re-run gets a fresh attempt at the
+    # cache import, and the build itself (docker compose build) is fully
+    # deterministic. We do NOT need to retry cancelled runs (default
+    # behavior), and 3 total attempts = initial + 2 retries is enough
+    # headroom for the cold-start class without burning CI minutes.
+    retry:
+      max-attempts: 3
     steps:
       # SHA-pinned `uses:` refs -- see verify.yml header for rationale.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # pin: v4.3.1
