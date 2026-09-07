@@ -4,14 +4,23 @@ FROM node:20-bookworm-slim AS buildrc
 
 WORKDIR /app/server
 
-# Install once with mounts so the cache layer survives source edits.
 COPY server/package.json server/package-lock.json* ./
+# postinstall runs scripts/ensure-browser.mjs; in Docker we FORCE the
+# headless-Chromium download and make it FATAL so a browser-less image can
+# never be produced silently (otherwise the first render would try to
+# download Chromium from the internet at runtime).
+ENV REMOTION_ENSURE_BROWSER_FORCE=1 \
+    REMOTION_ENSURE_BROWSER_STRICT=1
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --no-audit --no-fund
 
 COPY server/tsconfig.json ./
+COPY server/scripts ./scripts
 COPY server/src ./src
-COPY compositions ../compositions   # Source the bundler will pick up at runtime.
+# Source the bundler will pick up at runtime. (No inline comment here on
+# purpose: Dockerfile comments must start the line — a trailing "#..." is
+# parsed as extra COPY arguments.)
+COPY compositions ../compositions
 
 RUN npm run build && \
     npm prune --omit=dev
@@ -25,6 +34,9 @@ ENV NODE_ENV=production \
     COMPOSITIONS_ENTRY=/app/compositions/src/index.ts
 
 WORKDIR /app/server
+# dist + node_modules carry the compiled server AND the pre-downloaded
+# headless Chromium (it lands under node_modules), so the runtime needs no
+# internet access to render.
 COPY --from=buildrc /app/server/dist ./dist
 COPY --from=buildrc /app/server/node_modules ./node_modules
 COPY --from=buildrc /app/compositions /app/compositions

@@ -5,6 +5,7 @@ import { Tooltip } from "./Tooltip";
 import { useTimelineStore } from "../store/timelineStore";
 import { formatTimecode } from "../lib/utils";
 import { MainComposition } from "compositions/compositions/MainComposition";
+import { timelineEndFrames } from "compositions/types";
 import type { TimelineState } from "compositions/types";
 
 export const Preview: React.FC = () => {

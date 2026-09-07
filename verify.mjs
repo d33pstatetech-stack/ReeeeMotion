@@ -42,7 +42,9 @@ if (RUN_EXPORT_SMOKE) {
   });
 }
 
-const PARALLEL = true; // set to false to run sequentially (debug mode)
+// Sequential mode for debugging: `PARALLEL=false npm run verify` (this is
+// what the root `verify:seq` script sets). Defaults to parallel.
+const PARALLEL = /^(1|true|yes|on)$/i.test(process.env.PARALLEL ?? "true");
 
 function runTask(task) {
   return new Promise((resolve) => {

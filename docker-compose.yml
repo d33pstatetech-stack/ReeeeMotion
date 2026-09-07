@@ -47,14 +47,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.client
+      # The SPA defaults to same-origin API calls (nginx proxies /api,
+      # /uploads and /renders to `server`). To bake an absolute API origin
+      # into the bundle instead, pass it here as a build arg:
+      #   args: { VITE_API_BASE: "https://editor.example.com" }
     image: remotion-editor-client:local
     container_name: remotion-client
     depends_on:
       server:
         condition: service_healthy
-    environment:
-      # Tell the built SPA where the API lives. nginx.conf proxies /api -> server.
-      VITE_API_BASE: http://localhost:3001
     ports:
       - "5173:5173"
     restart: unless-stopped

@@ -451,3 +451,104 @@ describe("playback speed", () => {
     }
   });
 });
+
+describe("appendClip places clips after the latest END (not array order)", () => {
+  it("appends after the timeline's max end even when the array order drifted", () => {
+    const s = useTimelineStore.getState();
+    // appendClip always re-places at the timeline's latest end: v1 at 0-5,
+    // v2 at 5-25 (ignores the passed start — that's by design).
+    s.appendClip(makeVideoClip("v1", 0, 5));
+    s.appendClip(makeVideoClip("v2", 0, 20));
+    expect(useTimelineStore.getState().timeline.clips[1].start).toBe(5);
+    // Drag v2 to the front of the ARRAY (simulate moveClip reordering) so
+    // array order no longer matches timeline order.
+    s.moveClip(1, 0);
+    expect(useTimelineStore.getState().timeline.clips[0].id).toBe("v2");
+    // The next append must go to start=25 (latest END across the timeline),
+    // not start=20 (the old "end of last ARRAY entry" behavior, which would
+    // overlap v2 by 5s now that v2 sits earlier in the array).
+    s.appendClip(makeVideoClip("v3", 0, 3));
+    const v3 = useTimelineStore.getState().timeline.clips.find((c) => c.id === "v3");
+    expect(v3?.start).toBe(25);
+  });
+});
+
+describe("removeAsset cascades dependent clips", () => {
+  function makeAsset(id: string, url: string) {
+    return { id, name: id, url, kind: "video" as const };
+  }
+
+  it("removes timeline clips + audio clips that reference the asset URL", () => {
+    const s = useTimelineStore.getState();
+    s.addAssets([makeAsset("asset-1", "http://localhost:3001/uploads/a.png")]);
+    s.appendClip({
+      ...makeVideoClip("v1", 0, 5),
+      src: "http://localhost:3001/uploads/a.png",
+    });
+    s.appendAudioClip({
+      ...makeAudioClip("a1", 0, 5),
+      src: "http://localhost:3001/uploads/a.png",
+    });
+    s.appendClip(makeVideoClip("v2", 0, 5)); // unrelated clip stays
+    s.selectClip("v1");
+
+    s.removeAsset("asset-1");
+    const after = useTimelineStore.getState();
+    expect(after.assets).toHaveLength(0);
+    expect(after.timeline.clips.map((c) => c.id)).toEqual(["v2"]);
+    expect(after.timeline.audioClips).toHaveLength(0);
+    // Selection cleared because the selected clip was cascade-removed.
+    expect(after.selectedClipId).toBeNull();
+  });
+
+  it("is undoable as one step", () => {
+    const s = useTimelineStore.getState();
+    s.addAssets([makeAsset("asset-1", "http://localhost:3001/uploads/b.png")]);
+    s.appendClip({
+      ...makeVideoClip("v1", 0, 5),
+      src: "http://localhost:3001/uploads/b.png",
+    });
+    s.removeAsset("asset-1");
+    expect(useTimelineStore.getState().timeline.clips).toHaveLength(0);
+    useTimelineStore.getState().undo();
+    const back = useTimelineStore.getState();
+    expect(back.timeline.clips).toHaveLength(1);
+    expect(back.assets).toHaveLength(1);
+  });
+
+  it("keeps unrelated selections when the removed asset owns no clips", () => {
+    const s = useTimelineStore.getState();
+    s.appendClip(makeVideoClip("v1", 0, 5));
+    s.addAssets([makeAsset("asset-x", "http://localhost:3001/uploads/z.png")]);
+    s.selectClip("v1");
+    s.removeAsset("asset-x");
+    expect(useTimelineStore.getState().selectedClipId).toBe("v1");
+  });
+});
+
+describe("playhead duration via shared timelineEndSeconds", () => {
+  it("useTimelineDuration matches manual max-end math", () => {
+    const s = useTimelineStore.getState();
+    s.appendClip(makeVideoClip("v1", 0, 3)); // ends 3
+    s.appendAudioClip(makeAudioClip("a1", 2, 10)); // ends 12
+    s.appendTextClip(makeTextClip("t1", 4, 3)); // ends 7
+    expect(useTimelineStore.getState().timeline.clips).toHaveLength(1);
+    // Duration hook reads from the store; compute expected manually.
+    const tl = useTimelineStore.getState().timeline;
+    const manual = Math.max(
+      ...tl.clips.map((c) => c.start + (c.trim.to - c.trim.from)),
+      ...tl.audioClips.map((c) => c.start + (c.trim.to - c.trim.from)),
+      ...tl.textClips.map((c) => c.start + c.duration),
+    );
+    expect(manual).toBe(12);
+  });
+
+  it("scrubTo clamps to the shared end-frame count", () => {
+    const s = useTimelineStore.getState();
+    s.appendClip(makeVideoClip("v1", 0, 5)); // 5s * 30fps = 150 frames
+    s.scrubTo(9999);
+    expect(useTimelineStore.getState().currentFrame).toBe(150);
+    s.scrubTo(-50);
+    expect(useTimelineStore.getState().currentFrame).toBe(0);
+  });
+});

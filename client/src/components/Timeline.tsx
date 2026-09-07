@@ -26,6 +26,7 @@ import {
   snapSeconds,
   type SnapGuide,
 } from "../lib/utils";
+import { timelineEndFrames } from "compositions/types";
 import { ASSET_DRAG_MIME, type AssetItemPayload } from "./MediaBin";
 
 const PIXELS_PER_SECOND_DEFAULT = 80;
@@ -116,11 +117,21 @@ export const Timeline: React.FC = () => {
       // Text clips have no trim — only moves.
       if (clipKind === "text" && kind !== "move") return;
 
+      // Look the initial state up in the lane the clip actually lives in.
+      // (Text clips were previously looked up in `clips` and silently
+      // failed to drag.)
       const initial =
         clipKind === "audio"
           ? tl.audioClips.find((c) => c.id === clipId)
-          : tl.clips.find((c) => c.id === clipId);
+          : clipKind === "text"
+            ? tl.textClips.find((c) => c.id === clipId)
+            : tl.clips.find((c) => c.id === clipId);
       if (!initial) return;
+
+      // Snapshot history only AFTER the drag is validated — a rejected
+      // drag (e.g. trying to trim a text clip) must not push an empty
+      // undo step.
+      useTimelineStore.getState().beginInteraction();
 
       dragRef.current = {
         kind,
@@ -128,7 +139,10 @@ export const Timeline: React.FC = () => {
         clipKind,
         startX: e.clientX,
         initialStart: initial.start,
-        initialTrim: { ...initial.trim },
+        // Text clips have no trim window — a zero span keeps the shared
+        // drag state shape honest for the move-only case.
+        initialTrim:
+          "trim" in initial ? { ...initial.trim } : { from: 0, to: 0 },
       };
 
       const setGuideIfPresent = (g: SnapGuide | null) =>
@@ -255,31 +269,11 @@ export const Timeline: React.FC = () => {
       const tl = store.timeline;
       // Recompute the playhead-cap from the timeline contents so we
       // clamp scrubbed frames even if the user holds currentFrame
-      // stale across a structural edit. Mirrors the formula in
-      // useTimelineDuration() / timelineStore.scrubTo().
-      const videoMax =
-        tl.clips.length === 0
-          ? 0
-          : Math.max(
-              ...tl.clips.map(
-                (c) => c.start + (c.trim.to - c.trim.from),
-              ),
-            );
-      const audioMax =
-        tl.audioClips.length === 0
-          ? 0
-          : Math.max(
-              ...tl.audioClips.map(
-                (c) => c.start + (c.trim.to - c.trim.from),
-              ),
-            );
-      const textMax =
-        tl.textClips.length === 0
-          ? 0
-          : Math.max(...tl.textClips.map((c) => c.start + c.duration));
-      const totalSec = Math.max(videoMax, audioMax, textMax);
+      // stale across a structural edit. Uses the SAME shared
+      // timelineEndFrames() helper as the store + the server renderer,
+      // so playhead, preview and export can never disagree.
       const fps = tl.fps;
-      const maxFrames = Math.max(0, Math.round(totalSec * fps));
+      const maxFrames = Math.max(0, timelineEndFrames(tl));
 
       const initialSec = clientXToSeconds(e.clientX);
       const initialFrame = Math.max(
@@ -332,28 +326,7 @@ export const Timeline: React.FC = () => {
   const onRulerKeyDown = useCallback((e: React.KeyboardEvent) => {
     const store = useTimelineStore.getState();
     const tl = store.timeline;
-    const videoMax =
-      tl.clips.length === 0
-        ? 0
-        : Math.max(
-            ...tl.clips.map(
-              (c) => c.start + (c.trim.to - c.trim.from),
-            ),
-          );
-    const audioMax =
-      tl.audioClips.length === 0
-        ? 0
-        : Math.max(
-            ...tl.audioClips.map(
-              (c) => c.start + (c.trim.to - c.trim.from),
-            ),
-          );
-    const textMax =
-      tl.textClips.length === 0
-        ? 0
-        : Math.max(...tl.textClips.map((c) => c.start + c.duration));
-    const totalSec = Math.max(videoMax, audioMax, textMax);
-    const maxFrames = Math.max(0, Math.round(totalSec * tl.fps));
+    const maxFrames = Math.max(0, timelineEndFrames(tl));
     const cur = store.currentFrame;
 
     let delta: number | null = null;
@@ -366,6 +339,12 @@ export const Timeline: React.FC = () => {
         break;
       case "ArrowRight":
         delta = e.shiftKey ? tl.fps : 1;
+        break;
+      case "PageUp":
+        delta = 10;
+        break;
+      case "PageDown":
+        delta = -10;
         break;
       case "Home":
         delta = -cur;
@@ -419,25 +398,25 @@ export const Timeline: React.FC = () => {
     setDrop(null);
     const asset = readAssetFromDataTransfer(e.dataTransfer);
     if (!asset) return;
+    // Cached at upload time — avoids re-probing the media URL on drop.
+    const cached = asset.durationSec;
     if (lane === "video") {
       if (asset.kind === "audio") return;
       const id = appendClipAt(asset, sec);
       if (asset.kind === "video") {
-        try {
-          const dur = await probeVideoDuration(asset.url);
+        const dur =
+          cached && cached > 0 ? cached : await probeVideoDuration(asset.url).catch(() => NaN);
+        if (Number.isFinite(dur) && dur > 0) {
           updateClip(id, { trim: { from: 0, to: dur } });
-        } catch {
-          /* keep default */
         }
       }
     } else {
       if (asset.kind !== "audio") return;
       const id = appendAudioClipAt(asset, sec);
-      try {
-        const dur = await probeAudioDuration(asset.url);
+      const dur =
+        cached && cached > 0 ? cached : await probeAudioDuration(asset.url).catch(() => NaN);
+      if (Number.isFinite(dur) && dur > 0) {
         updateAudioClip(id, { trim: { from: 0, to: dur } });
-      } catch {
-        /* keep default */
       }
     }
   }
@@ -575,7 +554,7 @@ export const Timeline: React.FC = () => {
             </div>
           </div>
           {/* ---- VIDEO LANE ------------------------------------------- */}
-          <LaneShell lane="video" pxPerSec={pxPerSec} trackWidth={trackWidth}>
+          <LaneShell lane="video" trackWidth={trackWidth}>
             {timeline.clips.map((clip) => {
               const left = clip.start * pxPerSec;
               const width = (clip.trim.to - clip.trim.from) * pxPerSec;
@@ -610,12 +589,10 @@ export const Timeline: React.FC = () => {
                   trimLabel={`${formatTime(trim.from)} → ${formatTime(trim.to)} (${formatTime(trim.to - trim.from)})`}
                   onTrimLeft={(e) => {
                     e.stopPropagation();
-                    useTimelineStore.getState().beginInteraction();
                     startDrag("trim-l", id, e);
                   }}
                   onTrimRight={(e) => {
                     e.stopPropagation();
-                    useTimelineStore.getState().beginInteraction();
                     startDrag("trim-r", id, e);
                   }}
                   onDelete={(e) => {
@@ -634,7 +611,7 @@ export const Timeline: React.FC = () => {
           </LaneShell>
 
           {/* ---- AUDIO LANE ------------------------------------------- */}
-          <LaneShell lane="audio" pxPerSec={pxPerSec} trackWidth={trackWidth}>
+          <LaneShell lane="audio" trackWidth={trackWidth}>
             {timeline.audioClips.map((ac) => {
               const left = ac.start * pxPerSec;
               const width = (ac.trim.to - ac.trim.from) * pxPerSec;
@@ -649,7 +626,6 @@ export const Timeline: React.FC = () => {
                   lane="audio"
                   onPointerDownBody={(e) => {
                     selectByKind(ac.id, "audio", e);
-                    useTimelineStore.getState().beginInteraction();
                     startDrag("move", ac.id, e);
                   }}
                   label={
@@ -666,12 +642,10 @@ export const Timeline: React.FC = () => {
                   trimLabel={null}
                   onTrimLeft={(e) => {
                     e.stopPropagation();
-                    useTimelineStore.getState().beginInteraction();
                     startDrag("trim-l", ac.id, e);
                   }}
                   onTrimRight={(e) => {
                     e.stopPropagation();
-                    useTimelineStore.getState().beginInteraction();
                     startDrag("trim-r", ac.id, e);
                   }}
                   onDelete={(e) => {
@@ -690,7 +664,7 @@ export const Timeline: React.FC = () => {
           </LaneShell>
 
           {/* ---- TEXT LANE -------------------------------------------- */}
-          <LaneShell lane="text" pxPerSec={pxPerSec} trackWidth={trackWidth}>
+          <LaneShell lane="text" trackWidth={trackWidth}>
             {timeline.textClips.map((tc) => {
               const left = tc.start * pxPerSec;
               const width = tc.duration * pxPerSec;
@@ -705,7 +679,6 @@ export const Timeline: React.FC = () => {
                   lane="text"
                   onPointerDownBody={(e) => {
                     selectByKind(tc.id, "text", e);
-                    useTimelineStore.getState().beginInteraction();
                     startDrag("move", tc.id, e);
                   }}
                   label={
@@ -820,7 +793,6 @@ export const Timeline: React.FC = () => {
 
 const LaneShell: React.FC<{
   lane: "video" | "audio" | "text";
-  pxPerSec: number;
   trackWidth: number;
   children: React.ReactNode;
 }> = ({ lane, trackWidth, children }) => {

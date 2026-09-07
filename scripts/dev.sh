@@ -20,12 +20,13 @@
 #
 # `setsid` is strongly preferred (it gives each child its own
 # session+process group, so SIGTERM to "-${pid}" kills the whole tree
-# atomically). If your environment lacks setsid (e.g., Docker / minimal
-# CI runners / some Mac setups), you can opt into a relaxed-cleanup
-# fallback:
+# atomically). NOTE: macOS does NOT ship setsid (util-linux is a Linux
+# thing) — on Darwin this script automatically falls back to the
+# relaxed cleanup mode unless you override it. On any OS you can opt in
+# or out explicitly:
 #
-#     export ALLOW_NO_SETSID=1
-#     bash scripts/dev.sh --no-browser
+#     export ALLOW_NO_SETSID=1   # force the fallback (no setsid needed)
+#     export ALLOW_NO_SETSID=0   # refuse to start without setsid
 #
 # Trade-off: with the fallback, children stay in the parent's process
 # group. Cleanup walks each PID tree recursively via pgrep (POSIX) or
@@ -33,6 +34,9 @@
 # SIGTERM to its grandchildren may leave an orphaned watcher; the
 # SIGKILL follow-up after a 3-second sleep catches most cases but isn't
 # atomic.
+#
+# Portability: this script must run on macOS /bin/bash 3.2 — no bash-4
+# features (no associative arrays, no `${arr[-1]}`, no `wait -n`).
 #
 # Usage:
 #   bash scripts/dev.sh           # from the repo root
@@ -130,20 +134,24 @@ done
 # We PREFER `setsid` so each dev child becomes the leader of its own
 # session+process group. The cleanup trap then uses `kill -TERM -${pid}`
 # to kill the whole group (npm + tsx/vite children) atomically.
-# util-linux ships with setsid on every Linux, every macOS, and git-bash
-# on Windows most of the time.
+# util-linux ships setsid on every Linux and in git-bash on Windows — but
+# NOT on macOS, where a stock machine has no setsid at all.
 #
-# If setsid is missing, the script refuses to start by default — silent
-# degradation would leave zombie watchers on Ctrl-C. Operators who accept
-# that trade-off explicitly (e.g., Docker / minimal CI runners, automation
-# environments that lack util-linux) can opt into the relaxed-cleanup
-# fallback by exporting ALLOW_NO_SETSID=1. The fallback walks each PID
-# tree recursively via pgrep (POSIX) or via taskkill /T (Windows git-bash).
-# Cleanup is a bit slower (3s sleep vs 1s) and a misbehaving child could
-# leave a grandchild orphaned if it doesn't forward SIGTERM.
+# Resolution order when setsid is missing:
+#   1. On macOS: automatically fall back to the relaxed cleanup mode
+#      (opt out with ALLOW_NO_SETSID=0 to enforce the hard failure).
+#   2. Elsewhere: refuse to start unless ALLOW_NO_SETSID=1 is set —
+#      silent degradation would leave zombie watchers on Ctrl-C.
 USE_SETSID=1
 if ! command -v setsid >/dev/null 2>&1; then
-  if [[ "${ALLOW_NO_SETSID:-0}" != "1" ]]; then
+  UNAME_S="$(uname -s 2>/dev/null || echo Unknown)"
+  if [[ "${ALLOW_NO_SETSID:-}" == "1" ]]; then
+    USE_SETSID=0
+    echo "[dev.sh] NOTICE: setsid missing; ALLOW_NO_SETSID=1 accepted — using fallback cleanup (PID-tree walk)." >&2
+  elif [[ "${UNAME_S}" == "Darwin" && "${ALLOW_NO_SETSID:-}" != "0" ]]; then
+    USE_SETSID=0
+    echo "[dev.sh] NOTICE: macOS has no setsid — using fallback cleanup (PID-tree walk). Set ALLOW_NO_SETSID=0 to refuse instead." >&2
+  else
     cat >&2 <<'EOF'
 ERROR: `setsid` is not installed.
 
@@ -155,7 +163,9 @@ Install setsid:
   * Debian/Ubuntu:  sudo apt install util-linux   (usually already present)
   * RHEL/Fedora:    sudo dnf install util-linux
   * Alpine:         sudo apk add util-linux
-  * macOS:          preinstalled via util-linux (or `brew install util-linux`)
+  * macOS:          not available — this script auto-falls back to the
+                    PID-tree cleanup on Darwin; set ALLOW_NO_SETSID=0 to
+                    refuse that behavior.
   * git-bash/MSYS2: preinstalled
 
 OR opt into the relaxed-cleanup fallback by exporting ALLOW_NO_SETSID=1.
@@ -164,8 +174,6 @@ orphaned grandchildren may persist if a child doesn't forward SIGTERM.
 EOF
     exit 6
   fi
-  USE_SETSID=0
-  echo "[dev.sh] NOTICE: setsid missing; ALLOW_NO_SETSID=1 accepted — using fallback cleanup (PID-tree walk)." >&2
 fi
 
 # ---------- 3. Cleanup trap ------------------------------------------------
@@ -282,15 +290,21 @@ launch_in_group() {
   fi
 }
 
+# Log files are keyed by THIS shell's PID ($$ expanded ONCE, here, into a
+# variable — the previous inline \$$ escapes produced literal-dollar paths
+# that nothing could ever read back).
+SERVER_LOG="/tmp/dev-server.$$.log"
+CLIENT_LOG="/tmp/dev-client.$$.log"
+
 cd "${SERVER_DIR}"
 echo "[dev.sh] Starting server (port ${SERVER_PORT}) in ${SERVER_DIR} ..."
-launch_in_group "npm run dev" >/tmp/dev-server.${$}.log 2>&1
+launch_in_group "npm run dev" >"${SERVER_LOG}" 2>&1
 SERVER_PID=$!
 PIDS+=("${SERVER_PID}")
 
 cd "${CLIENT_DIR}"
 echo "[dev.sh] Starting client (port ${CLIENT_PORT}) in ${CLIENT_DIR} ..."
-launch_in_group "npm run dev" >/tmp/dev-client.${$}.log 2>&1
+launch_in_group "npm run dev" >"${CLIENT_LOG}" 2>&1
 CLIENT_PID=$!
 PIDS+=("${CLIENT_PID}")
 
@@ -315,26 +329,28 @@ if [[ "${USE_SETSID}" = "1" ]]; then
 fi
 write_manifest "${REPO_ROOT}" "${SERVER_PID}" "${CLIENT_PID}" "${SERVER_PGID}" "${CLIENT_PGID}"
 
-# ---------- 5. Wait for both ports to answer -------------------------------
+# ---------- 5. Wait for each port to answer --------------------------------
 wait_for_port() {
   local port="$1"
   local label="$2"
+  local pid="$3"
+  local log_file="$4"
   for ((i=0; i<STARTUP_TIMEOUT_SEC; i++)); do
     if port_in_use "${port}"; then
-      echo "[dev.sh] ${label} ready (port ${port}, pid ${PIDS[-1]}) after ${i}s."
+      echo "[dev.sh] ${label} ready (port ${port}, pid ${pid}) after ${i}s."
       return 0
     fi
     sleep 1
   done
   echo "" >&2
   echo "ERROR: ${label} did not bind port ${port} within ${STARTUP_TIMEOUT_SEC}s." >&2
-  echo "Last 30 lines of /tmp/dev-${label}.log:" >&2
-  tail -n 30 "/tmp/dev-${label}.\$$.log" 2>/dev/null || true
+  echo "Last 30 lines of ${log_file}:" >&2
+  tail -n 30 "${log_file}" 2>/dev/null || true
   return 1
 }
 
-wait_for_port "${SERVER_PORT}" "server" || { cleanup SIGTERM; exit 4; }
-wait_for_port "${CLIENT_PORT}" "client" || { cleanup SIGTERM; exit 4; }
+wait_for_port "${SERVER_PORT}" "server" "${SERVER_PID}" "${SERVER_LOG}" || { cleanup SIGTERM; exit 4; }
+wait_for_port "${CLIENT_PORT}" "client" "${CLIENT_PID}" "${CLIENT_LOG}" || { cleanup SIGTERM; exit 4; }
 
 # ---------- 6. Print URL table + optional browser open ---------------------
 cat <<EOF
@@ -345,8 +361,8 @@ cat <<EOF
 │  Client UI  →  http://localhost:${CLIENT_PORT}/
 │  API (up.)  →  http://localhost:${SERVER_PORT}/api/health    ⎯ ready
 │  Server PID →  ${SERVER_PID}    Client PID →  ${CLIENT_PID}
-│  Logs       →  /tmp/dev-server.\$\$.log
-│              /tmp/dev-client.\$\$.log
+│  Logs       →  ${SERVER_LOG}
+│              ${CLIENT_LOG}
 │  Stop       →  Ctrl-C (kills the whole stack)
 └──────────────────────────────────────────────────────────────┘
 
@@ -365,8 +381,10 @@ fi
 
 # ---------- 7. Wait forever; the trap handles cleanup ----------------------
 echo "[dev.sh] Tailing both logs in this terminal. Ctrl-C to quit."
-tail -F /tmp/dev-server.\$\$.log /tmp/dev-client.\$\$.log 2>/dev/null &
-wait -n 2>/dev/null || true
+# tail is a background job only so it dies with this shell; the polling
+# loop below is the real liveness watchdog. (No `wait -n` — that's
+# bash 4.3+ and macOS ships bash 3.2.)
+tail -F "${SERVER_LOG}" "${CLIENT_LOG}" 2>/dev/null &
 
 # Hold the script open until either child exits unexpectedly.
 while true; do

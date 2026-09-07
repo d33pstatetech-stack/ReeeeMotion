@@ -1,8 +1,14 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Download, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import { useTimelineStore } from "../store/timelineStore";
-import { exportTimelineAsBinary } from "../lib/api";
+import {
+  startRenderJob,
+  fetchRenderJob,
+  downloadRenderJobFile,
+} from "../lib/api";
+
+const POLL_INTERVAL_MS = 1000;
 
 export const ExportPanel: React.FC = () => {
   const timeline = useTimelineStore((s) => s.timeline);
@@ -10,15 +16,46 @@ export const ExportPanel: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUrl, setLastUrl] = useState<string | null>(null);
+  // Abort polling if the component unmounts mid-render.
+  const pollTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimer.current !== null) window.clearInterval(pollTimer.current);
+    };
+  }, []);
 
   async function onExport() {
     setError(null);
     setBusy(true);
     setProgress(0);
     try {
-      const result = await exportTimelineAsBinary(timeline, setProgress);
+      // 1. Kick off the background render; the server replies immediately
+      //    with a job id so we can poll REAL renderer progress (the
+      //    previous UX pinned the bar at 0% for the entire render).
+      const jobId = await startRenderJob(timeline);
+      // 2. Poll until done/error.
+      await new Promise<void>((resolve, reject) => {
+        pollTimer.current = window.setInterval(() => {
+          fetchRenderJob(jobId)
+            .then((job) => {
+              if (job.status === "error") {
+                reject(new Error(job.error ?? "render failed"));
+                return;
+              }
+              setProgress(job.progress);
+              if (job.status === "done") {
+                setLastUrl(job.url ?? null);
+                resolve();
+              }
+            })
+            .catch(reject);
+        }, POLL_INTERVAL_MS);
+      });
+      // 3. Stream the finished MP4 through a Blob so the browser download
+      //    works regardless of which origin serves the file.
+      const result = await downloadRenderJobFile(jobId);
       const url = URL.createObjectURL(result.blob);
-      setLastUrl(url);
       // Auto-trigger download for convenience.
       const a = document.createElement("a");
       a.href = url;
@@ -26,9 +63,15 @@ export const ExportPanel: React.FC = () => {
       document.body.appendChild(a);
       a.click();
       a.remove();
-    } catch (e: any) {
-      setError(e?.message ?? "export failed");
+      // Revoke the object URL once the download has had a moment to start.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: unknown) {
+      setError((e as Error)?.message ?? "export failed");
     } finally {
+      if (pollTimer.current !== null) {
+        window.clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
       setBusy(false);
       setProgress(null);
     }

@@ -14,17 +14,13 @@ export default defineConfig({
 // `client/node_modules` for the BROWSER preview ONLY.
 //
 // ⚠️ These aliases are browser-side only. The server-side
-// @remotion/bundler resolves through `server/node_modules` (which
-// transitively pulls in `remotion` and `@remotion/*` via
-// @remotion/bundler + @remotion/renderer), so server-side renders do
-// NOT need — and MUST NOT — run `npm install` inside `compositions/`.
-// If a future maintainer does that install and expects per-package
-// versions to win, they will be silently shadowed by THESE aliases
-// (every `remotion` or `@remotion/transitions` import always routes
-// to `client/node_modules` from the browser's point of view).
-// Keep `client/package.json` and `compositions/package.json` in sync
-// on `remotion` + `@remotion/transitions` versions to avoid two
-// separate copies hanging around the bundle.
+// @remotion/bundler resolves through `server/node_modules`, so server-side
+// renders do NOT need — and MUST NOT — run `npm install` inside
+// `compositions/`. If a future maintainer does that install and expects
+// per-package versions to win, they will be silently shadowed by THESE
+// aliases from the browser's point of view. Keep `client/package.json` and
+// `compositions/package.json` in sync on the `remotion` version to avoid
+// two separate copies hanging around the bundle.
     alias: [
       // Editor-side `@/...` resolved against client/src.
       { find: "@", replacement: path.resolve(__dirname, "src") },
@@ -54,13 +50,6 @@ export default defineConfig({
       {
         find: /^remotion($|\/)/,
         replacement: path.resolve(__dirname, "node_modules/remotion") + "$1",
-      },
-      // Same treatment for `@remotion/transitions`, the only @remotion/*
-      // package actually imported by compositions/ source today.
-      {
-        find: /^@remotion\/transitions($|\/)/,
-        replacement:
-          path.resolve(__dirname, "node_modules/@remotion/transitions") + "$1",
       },
     ],
   },

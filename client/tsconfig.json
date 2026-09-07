@@ -20,8 +20,7 @@
       "react": ["./node_modules/@types/react"],
       "react/jsx-runtime": ["./node_modules/react/jsx-runtime"],
       "react/jsx-dev-runtime": ["./node_modules/react/jsx-dev-runtime"],
-      "remotion": ["./node_modules/remotion"],
-      "@remotion/transitions": ["./node_modules/@remotion/transitions"]
+      "remotion": ["./node_modules/remotion"]
     },
     "types": ["vite/client", "node", "react"]
   },

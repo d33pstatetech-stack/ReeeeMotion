@@ -1,8 +1,11 @@
-// Tiny typed wrapper around the Express server. No external HTTP lib needed,
-// the browser's `fetch` is fine because Vite's dev proxy makes everything
-// same-origin in dev.
-
-const BASE = (import.meta.env.VITE_API_BASE ?? "http://localhost:3001").replace(/\/$/, "");
+// Tiny typed wrapper around the Express server. No external HTTP lib needed.
+//
+// BASE defaults to "" (same-origin): the Vite dev server proxies /api,
+// /uploads and /renders to the Express backend, and the production nginx
+// image does the same — so the SPA works without knowing where the server
+// lives. Set VITE_API_BASE at BUILD time to point the built bundle at an
+// absolute API origin instead (the value is inlined by Vite).
+const BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
 export interface UploadAsset {
   id: string;
@@ -13,7 +16,6 @@ export interface UploadAsset {
   /** Server tells the client what lane the file belongs on. */
   kind: "video" | "image" | "audio";
   size: number;
-  pathOnDisk?: string;
 }
 
 export async function uploadFiles(files: File[]): Promise<UploadAsset[]> {
@@ -36,58 +38,60 @@ export async function deleteAsset(filename: string) {
   return res.json();
 }
 
+// ---------- Render job flow ----------------------------------------------
+//
+// Rendering can take minutes, so the server runs it in the background:
+//   1. POST /api/render/jobs        -> 202 { jobId }
+//   2. GET  /api/render/jobs/:id    -> { status, progress, url?, error? }
+//   3. GET  /api/render/jobs/:id/file -> the finished MP4 (streamed)
+// The editor polls step 2 to drive the progress bar with REAL renderer
+// progress, then streams step 3 through a Blob so the download works
+// cross-origin (an <a download> to another origin would be ignored).
+
+export interface RenderJobStatus {
+  jobId: string;
+  status: "rendering" | "done" | "error";
+  /** 0..1 — the actual @remotion/renderer progress. */
+  progress: number;
+  url?: string;
+  error?: string;
+}
+
+export async function startRenderJob(timeline: unknown): Promise<string> {
+  const res = await fetch(`${BASE}/api/render/jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ timeline }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? "render failed to start");
+  }
+  const json = (await res.json()) as { jobId: string };
+  return json.jobId;
+}
+
+export async function fetchRenderJob(jobId: string): Promise<RenderJobStatus> {
+  const res = await fetch(`${BASE}/api/render/jobs/${jobId}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? "render job lookup failed");
+  }
+  return (await res.json()) as RenderJobStatus;
+}
+
 export interface RenderResult {
   blob: Blob;
   filename: string;
 }
 
-export async function exportTimelineAsBinary(
-  timeline: unknown,
-  onProgress?: (p: number) => void,
-): Promise<RenderResult> {
-  const res = await fetch(`${BASE}/api/render`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ timeline, mode: "binary" }),
-  });
+/** Fetch the finished MP4 for a completed job and hand it back as a Blob. */
+export async function downloadRenderJobFile(jobId: string): Promise<RenderResult> {
+  const res = await fetch(`${BASE}/api/render/jobs/${jobId}/file`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? "render failed");
+    throw new Error(err.error ?? "render download failed");
   }
-  // Total Render length comes from Content-Length if available.
-  const total = Number(res.headers.get("Content-Length") ?? 0);
-  const reader = res.body?.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  if (reader) {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        received += value.length;
-        if (onProgress && total) onProgress(received / total);
-      }
-    }
-  }
-  return {
-    blob: new Blob(chunks, { type: "video/mp4" }),
-    filename: "remotion-export.mp4",
-  };
-}
-
-export async function exportTimelineAsUrl(
-  timeline: unknown,
-): Promise<string> {
-  const res = await fetch(`${BASE}/api/render`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ timeline, mode: "url" }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? "render failed");
-  }
-  const json = (await res.json()) as { url: string };
-  return json.url;
+  const blob = await res.blob();
+  return { blob, filename: "remotion-export.mp4" };
 }

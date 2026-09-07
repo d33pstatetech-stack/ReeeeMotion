@@ -58,6 +58,13 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# ---------- user media + renders ----------------------------------------
+# Whatever lands in the server's upload/render directories is local user
+# data, never source. (These were historically committed by accident —
+# including sample MP4s/PNGs — and are untracked as of the cleanup.)
+server/uploads/
+server/renders/
 !.env.example
 
 # ---------- logs --------------------------------------------------------

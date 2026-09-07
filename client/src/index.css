@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Inter variable font, vendored locally (client/public/fonts) so the editor
+   needs zero network access to look right — the previous rsms.me stylesheet
+   link silently broke the UI on offline machines despite the "fully local"
+   promise. Latin subset keeps it at ~100 KB per file. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/InterVariable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/InterVariable-Italic.woff2") format("woff2");
+}
+
 :root {
   color-scheme: dark;
 }

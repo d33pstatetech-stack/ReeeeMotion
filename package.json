@@ -2,12 +2,12 @@
   "name": "remotion-editor-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "Monorepo root for the Remotion video editor. Each package (client, compositions, server) has its own scripts; this root script fans them out in parallel so a single `npm run verify` surfaces every failure in one shot.",
+  "description": "Monorepo root for the Remotion video editor. Each package (client, server, compositions) is intentionally its own standalone package (NO npm workspaces — see README); this root only hosts cross-cutting launcher scripts, Electron, and the `verify` fan-out.",
   "main": "electron/main.js",
   "scripts": {
     "verify": "node verify.mjs",
     "verify:seq": "PARALLEL=false node verify.mjs",
-    "typecheck": "node ./node_modules/typescript/bin/tsc --version || (cd client && npm run typecheck) && (cd server && npm run typecheck)",
+    "typecheck": "cd client && npm run typecheck && cd ../server && npm run typecheck",
     "test": "cd client && npm test",
     "test:pwsh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-pwsh.ps1",
     "verify:pwsh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-pwsh.ps1",
@@ -40,10 +40,5 @@
     "extends": null,
     "appId": "dev.remotion.editor",
     "productName": "Remotion Editor"
-  },
-  "workspaces": [
-    "client",
-    "server",
-    "compositions"
-  ]
+  }
 }

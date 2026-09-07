@@ -1,11 +1,13 @@
 import { create } from "zustand";
-import { persist, createJSONStorage, type PersistStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import {
   DEFAULT_TIMELINE,
   DEFAULT_AUDIO_CLIP,
   DEFAULT_TEXT_CLIP,
   PROJECT_FILE_KIND,
   PROJECT_FILE_VERSION,
+  timelineEndSeconds,
+  timelineEndFrames,
   type AudioClip,
   type TextClip,
   type TimelineClip,
@@ -30,6 +32,12 @@ export interface AssetItem {
   kind: "video" | "image" | "audio";
   filename?: string;
   size?: number;
+  /**
+   * Natural duration of the media in seconds, probed once at upload time
+   * (via a hidden <video>/<audio>) and cached so appending the asset to
+   * the timeline doesn't have to re-probe the URL every time.
+   */
+  durationSec?: number;
 }
 
 const HISTORY_LIMIT = 50;
@@ -38,6 +46,17 @@ const HISTORY_LIMIT = 50;
  * entry. Keeps a single slider drag to roughly one undo step.
  */
 const HISTORY_DEBOUNCE_MS = 250;
+
+/**
+ * One undo step. Snapshots BOTH the timeline and the media bin: removing
+ * an asset cascades into dependent clips, so undo must restore both
+ * together or the timeline would come back referencing a bin entry that
+ * is still gone.
+ */
+interface HistorySnapshot {
+  timeline: TimelineState;
+  assets: AssetItem[];
+}
 
 interface TimelineStore {
   timeline: TimelineState;
@@ -60,8 +79,8 @@ interface TimelineStore {
   playbackRate: number;
 
   /** Undo/redo stack (in memory only; never persisted to localStorage). */
-  past: TimelineState[];
-  future: TimelineState[];
+  past: HistorySnapshot[];
+  future: HistorySnapshot[];
   /** Wall-clock timestamp of the last history snapshot (ms). */
   _lastHistoryAt: number;
 
@@ -163,9 +182,9 @@ interface TimelineStore {
 }
 
 function pushPast(
-  past: TimelineState[],
-  snap: TimelineState,
-): TimelineState[] {
+  past: HistorySnapshot[],
+  snap: HistorySnapshot,
+): HistorySnapshot[] {
   const next = [...past, snap];
   if (next.length > HISTORY_LIMIT) next.shift();
   return next;
@@ -192,7 +211,7 @@ export const useTimelineStore = create<TimelineStore>()(
         const now = Date.now();
         if (now - s._lastHistoryAt < HISTORY_DEBOUNCE_MS) return;
         set({
-          past: pushPast(s.past, s.timeline),
+          past: pushPast(s.past, { timeline: s.timeline, assets: s.assets }),
           future: [],
           _lastHistoryAt: now,
         });
@@ -218,17 +237,53 @@ export const useTimelineStore = create<TimelineStore>()(
         // ---------- Asset bin ----------
         addAssets: (assets) =>
           set((s) => ({ assets: [...s.assets, ...assets] })),
-        removeAsset: (id) =>
-          set((s) => ({ assets: s.assets.filter((a) => a.id !== id) })),
+        // Removing an asset also removes every clip (video/image) and audio
+        // clip that references its URL — otherwise the timeline keeps
+        // dangling clips whose media 404s in both the preview and exports.
+        // History is snapshotted IMMEDIATELY (not through the debounced
+        // recordHistory): a destructive multi-target removal must always be
+        // one clean Ctrl-Z step, even right after another edit.
+        removeAsset: (id) => {
+          const s0 = get();
+          set({
+            past: pushPast(s0.past, { timeline: s0.timeline, assets: s0.assets }),
+            future: [],
+            _lastHistoryAt: Date.now(),
+          });
+          set((s) => {
+            const asset = s.assets.find((a) => a.id === id);
+            if (!asset) return { assets: s.assets.filter((a) => a.id !== id) };
+            const clips = s.timeline.clips.filter((c) => c.src !== asset.url);
+            const audioClips = s.timeline.audioClips.filter(
+              (c) => c.src !== asset.url,
+            );
+            return {
+              assets: s.assets.filter((a) => a.id !== id),
+              timeline: { ...s.timeline, clips, audioClips },
+              selectedClipId: clips.some((c) => c.id === s.selectedClipId)
+                ? s.selectedClipId
+                : null,
+              selectedAudioClipId: audioClips.some(
+                (c) => c.id === s.selectedAudioClipId,
+              )
+                ? s.selectedAudioClipId
+                : null,
+            };
+          });
+        },
 
         // ---------- Video / image ----------
         appendClip: (clip) => {
           recordHistory();
           set((s) => {
-            const last = s.timeline.clips[s.timeline.clips.length - 1];
-            const nextStart = last
-              ? last.start + (last.trim.to - last.trim.from)
-              : 0;
+            // Place the new clip AFTER the latest clip END on the timeline
+            // (not "after the last array entry" — the array order drifts
+            // from timeline order once clips are dragged around/reordered).
+            let nextStart = 0;
+            for (const c of s.timeline.clips) {
+              const end = c.start + (c.trim.to - c.trim.from);
+              if (end > nextStart) nextStart = end;
+            }
             const placed: TimelineClip = { ...clip, start: nextStart };
             return {
               timeline: { ...s.timeline, clips: [...s.timeline.clips, placed] },
@@ -695,7 +750,7 @@ export const useTimelineStore = create<TimelineStore>()(
         beginInteraction: () => {
           const s = get();
           set({
-            past: pushPast(s.past, s.timeline),
+            past: pushPast(s.past, { timeline: s.timeline, assets: s.assets }),
             future: [],
             _lastHistoryAt: Date.now(),
           });
@@ -703,28 +758,29 @@ export const useTimelineStore = create<TimelineStore>()(
         endInteraction: () => stamp(),
 
         undo: () => {
-          const { past, timeline, selectedClipId, selectedAudioClipId, selectedTextClipId } = get();
+          const { past, timeline, assets, selectedClipId, selectedAudioClipId, selectedTextClipId } = get();
           if (past.length === 0) return;
           const prev = past[past.length - 1];
           // Restore selections only if the selected clip still exists in prev.
           const restoreClip =
-            selectedClipId && prev.clips.some((c) => c.id === selectedClipId)
+            selectedClipId && prev.timeline.clips.some((c) => c.id === selectedClipId)
               ? selectedClipId
               : null;
           const restoreAudio =
             selectedAudioClipId &&
-            prev.audioClips.some((c) => c.id === selectedAudioClipId)
+            prev.timeline.audioClips.some((c) => c.id === selectedAudioClipId)
               ? selectedAudioClipId
               : null;
           const restoreText =
             selectedTextClipId &&
-            prev.textClips.some((c) => c.id === selectedTextClipId)
+            prev.timeline.textClips.some((c) => c.id === selectedTextClipId)
               ? selectedTextClipId
               : null;
           set({
-            timeline: prev,
+            timeline: prev.timeline,
+            assets: prev.assets,
             past: past.slice(0, -1),
-            future: [timeline, ...get().future],
+            future: [{ timeline, assets }, ...get().future],
             selectedClipId: restoreClip,
             selectedAudioClipId: restoreAudio,
             selectedTextClipId: restoreText,
@@ -732,12 +788,13 @@ export const useTimelineStore = create<TimelineStore>()(
           });
         },
         redo: () => {
-          const { future, timeline } = get();
+          const { future, timeline, assets } = get();
           if (future.length === 0) return;
           const next = future[0];
           set({
-            timeline: next,
-            past: [...get().past, timeline],
+            timeline: next.timeline,
+            assets: next.assets,
+            past: [...get().past, { timeline, assets }],
             future: future.slice(1),
             _lastHistoryAt: 0,
           });
@@ -749,7 +806,7 @@ export const useTimelineStore = create<TimelineStore>()(
           const s = get();
           set({
             timeline: DEFAULT_TIMELINE,
-            past: pushPast(s.past, s.timeline),
+            past: pushPast(s.past, { timeline: s.timeline, assets: s.assets }),
             future: [],
             selectedClipId: null,
             selectedAudioClipId: null,
@@ -763,15 +820,16 @@ export const useTimelineStore = create<TimelineStore>()(
         // ---------- Adjustment ----------
         nudgeSelectedClip: (deltaSec) => {
           const s = get();
-          // Try each kind in order; pick the first that exists.
+          // Each nudge uses the DEBOUNCED recordHistory (not
+          // beginInteraction) so holding an arrow key collapses the whole
+          // burst of repeats into ~one undo step instead of 50.
           if (s.selectedClipId) {
             const clip = pickClip(s.timeline, s.selectedClipId);
             if (!clip) return;
             const newStart = clamp(clip.start + deltaSec, 0, 9999);
             if (newStart !== clip.start) {
-              s.beginInteraction();
+              s.recordHistory();
               s.setStart(s.selectedClipId, newStart);
-              s.endInteraction();
             }
             return;
           }
@@ -780,9 +838,8 @@ export const useTimelineStore = create<TimelineStore>()(
             if (!ac) return;
             const newStart = clamp(ac.start + deltaSec, 0, 9999);
             if (newStart !== ac.start) {
-              s.beginInteraction();
+              s.recordHistory();
               s.setAudioStart(s.selectedAudioClipId, newStart);
-              s.endInteraction();
             }
             return;
           }
@@ -791,9 +848,8 @@ export const useTimelineStore = create<TimelineStore>()(
             if (!tc) return;
             const newStart = clamp(tc.start + deltaSec, 0, 9999);
             if (newStart !== tc.start) {
-              s.beginInteraction();
+              s.recordHistory();
               s.setTextStart(s.selectedTextClipId, newStart);
-              s.endInteraction();
             }
             return;
           }
@@ -869,28 +925,7 @@ export const useTimelineStore = create<TimelineStore>()(
         },
         scrubTo: (frame) => {
           const tl = get().timeline;
-          const videoMax =
-            tl.clips.length === 0
-              ? 0
-              : Math.max(
-                  ...tl.clips.map(
-                    (c) => c.start + (c.trim.to - c.trim.from),
-                  ),
-                );
-          const audioMax =
-            tl.audioClips.length === 0
-              ? 0
-              : Math.max(
-                  ...tl.audioClips.map(
-                    (c) => c.start + (c.trim.to - c.trim.from),
-                  ),
-                );
-          const textMax =
-            tl.textClips.length === 0
-              ? 0
-              : Math.max(...tl.textClips.map((c) => c.start + c.duration));
-          const totalSec = Math.max(videoMax, audioMax, textMax);
-          const maxFrames = Math.max(0, Math.round(totalSec * tl.fps));
+          const maxFrames = Math.max(0, timelineEndFrames(tl));
           const clamped = Math.max(0, Math.min(maxFrames, Math.round(frame)));
           set({
             currentFrame: clamped,
@@ -952,16 +987,7 @@ export const useSelectedTextClip = () =>
 /** Returns the total playhead duration (seconds) across all three layers. */
 export function useTimelineDuration(): number {
   return useTimelineStore((s) => {
-    const videoMax = s.timeline.clips.length === 0
-      ? 0
-      : Math.max(...s.timeline.clips.map((c) => c.start + (c.trim.to - c.trim.from)));
-    const audioMax = s.timeline.audioClips.length === 0
-      ? 0
-      : Math.max(...s.timeline.audioClips.map((c) => c.start + (c.trim.to - c.trim.from)));
-    const textMax = s.timeline.textClips.length === 0
-      ? 0
-      : Math.max(...s.timeline.textClips.map((c) => c.start + c.duration));
-    const total = Math.max(videoMax, audioMax, textMax);
+    const total = timelineEndSeconds(s.timeline);
     return total === 0 ? 1 : total;
   });
 }

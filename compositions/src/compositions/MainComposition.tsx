@@ -55,6 +55,9 @@ export const MainComposition: React.FC<MainProps> = ({ timeline }) => {
   const sorted = [...clips].sort((a, b) => a.start - b.start);
   const sortedAudio = [...audioClips].sort((a, b) => a.start - b.start);
   const sortedText = [...textClips].sort((a, b) => a.start - b.start);
+  // O(1) id lookups for the transition layer (was sorted.find per
+  // transition, quadratic in clip count).
+  const clipById = new Map(sorted.map((c) => [c.id, c]));
 
   // Build cross-clip visual transitions between adjacent video clips.
   const transitions: Array<{
@@ -115,24 +118,29 @@ export const MainComposition: React.FC<MainProps> = ({ timeline }) => {
         </Sequence>
       ))}
 
-      {transitions.map((t, i) => (
-        <Sequence
-          key={`t-${t.fromId}-${t.toId}-${i}`}
-          from={t.atFrame}
-          durationInFrames={t.durationFrames}
-        >
-          <TransitionLayer
-            kind={t.kind}
-            fps={fps}
-            width={width}
-            height={height}
-            from={sorted.find((c) => c.id === t.fromId)!}
-            to={sorted.find((c) => c.id === t.toId)!}
-            durationFrames={t.durationFrames}
-            zeroAvailableOverlap={!t.hasOverlap}
-          />
-        </Sequence>
-      ))}
+      {transitions.map((t, i) => {
+        const fromClip = clipById.get(t.fromId);
+        const toClip = clipById.get(t.toId);
+        if (!fromClip || !toClip) return null;
+        return (
+          <Sequence
+            key={`t-${t.fromId}-${t.toId}-${i}`}
+            from={t.atFrame}
+            durationInFrames={t.durationFrames}
+          >
+            <TransitionLayer
+              kind={t.kind}
+              fps={fps}
+              width={width}
+              height={height}
+              from={fromClip}
+              to={toClip}
+              durationFrames={t.durationFrames}
+              zeroAvailableOverlap={!t.hasOverlap}
+            />
+          </Sequence>
+        );
+      })}
 
       {/* Text overlays on top of everything */}
       {sortedText.map((tc) => (
