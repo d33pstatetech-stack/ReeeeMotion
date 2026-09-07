@@ -13,17 +13,16 @@ React + Vite frontend that talks to a Node.js + Express backend which uses
 **Remotion's bundler + renderer** to produce the final video headlessly.
 
 ```
-remotion/
+ReeeeMotion/
 ├── client/         React + Vite + TypeScript + Tailwind UI (port 5173)
 ├── server/         Node + Express + multer + @remotion/renderer (port 3001)
 ├── compositions/   Pure Remotion project consumed by both client & server
 ├── verify.mjs      Cross-package parallel verifier (typecheck + vitest)
 ├── docker-compose.yml   Two-service stack (server + nginx-served client)
-├── Dockerfile.server    Multi-stage build → runtime with compositions/ baked in
+├── Dockerfile.server    Multi-stage build → runtime with compositions/ + Chromium baked in
 ├── Dockerfile.client    Multi-stage build → nginx:alpine serving Vite SPA
-└── .github/workflows/verify.yml  CI: runs `npm run verify` on every push + PR
 ├── client/public/user-guide.html  Single-page user guide (Quickstart + Glossary) — served at /user-guide.html
-├── docker-compose.yml
+└── .github/workflows/verify.yml  CI: runs `npm run verify` on every push + PR
 ```
 
 ## Quick start (one-time setup)
@@ -40,6 +39,13 @@ cd compositions && npm install
 cd ../server && npm install
 cd ../client && npm install
 ```
+
+> **First export = one-time browser download.** The server's headless
+> Chromium (used by `@remotion/renderer`) is fetched automatically by a
+> `postinstall` hook in `server/` (~150 MB, cached). If the machine doing
+> the exporting is offline, pre-install the browser on a connected machine
+> or run `cd server && npm run ensure-browser` once while online — exports
+> fail with a clear error rather than a TLS stack trace when it's missing.
 
 > We intentionally keep the three packages **separate** (no workspaces) so each
 > one chooses its own dev/build commands and to keep the Remotion composition
@@ -64,17 +70,19 @@ Open **http://localhost:5173**.
 
 If you'd rather run both processes in a single terminal, the repo ships
 `scripts/dev.sh` (and an `npm run dev:all` shortcut at the repo root). It
-boots server + client, prints a URL table, tails both logs, and tears the
-whole stack down atomically on Ctrl-C. By default it requires `setsid`
-(util-linux — preinstalled on macOS, every Linux distribution, and git-bash),
-which gives it a session-leader-based atomic-cleanup guarantee. If your
-environment lacks `setsid` (Docker Alpine, minimal CI runners, containers
-without util-linux), opt into a relaxed-cleanup fallback:
+boots server + client, prints a URL table (with real log paths), tails both
+logs, and tears the whole stack down atomically on Ctrl-C. Cleanup prefers
+`setsid` (util-linux — preinstalled on every Linux distribution and in
+git-bash), which gives a session-leader-based atomic-cleanup guarantee.
+**macOS does not ship `setsid`**; on Darwin the script automatically uses
+the relaxed-cleanup fallback (and still works out of the box). On other
+`setsid`-less environments (Docker Alpine, minimal CI runners, containers
+without util-linux), opt into the same fallback explicitly:
 
 ```bash
 # Trade-off: cleanup walks each PID tree via pgrep/taskkill instead of
 # killing a session+process group atomically; an occasional grandchild
-# watchers can linger if a child doesn't forward SIGTERM.
+# watcher can linger if a child doesn't forward SIGTERM.
 ALLOW_NO_SETSID=1 npm run dev:all
 ```
 
@@ -201,11 +209,22 @@ How it works:
 4. The **Preview** is a `<Player>` from `@remotion/player`. It renders the
    `MainComposition` from the `compositions/` package, fed with the live
    timeline JSON as `inputProps`. Changes are reflected frame-perfectly.
-5. Click **Export**. The client `POST`s the timeline JSON to `/api/render`.
-   The server:
-   1. uses `@remotion/bundler` to bundle `compositions/`,
+5. Click **Export**. The client starts a background render job
+   (`POST /api/render/jobs`) and polls its real progress
+   (`GET /api/render/jobs/:id`), streaming the finished MP4 from
+   (`GET /api/render/jobs/:id/file`). The server:
+   1. uses `@remotion/bundler` to bundle `compositions/` (cached — a
+      re-bundle only happens when the compositions source changes),
    2. uses `@remotion/renderer` to render the MP4 (`server/renders/<id>.mp4`),
-   3. streams the file back as a download.
+   3. hands the file back as a download.
+
+   The legacy synchronous `POST /api/render` (same body, plus
+   `mode: "url" | "binary"`) is kept for scripts — it's what
+   `npm run smoke:export` exercises.
+
+   Housekeeping: files in `server/renders/` are TTL-swept after 24 h and
+   `server/uploads/` after 7 days (tune or disable with
+   `RENDER_TTL_HOURS` / `UPLOAD_TTL_HOURS`; `0` disables a bucket).
 
 ## User guide
 

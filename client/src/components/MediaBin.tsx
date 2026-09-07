@@ -33,7 +33,12 @@ export interface AssetItemPayload {
   kind: "video" | "image" | "audio";
   filename?: string;
   size?: number;
+  /** Duration cached at upload time (seconds); optional. */
+  durationSec?: number;
 }
+
+/** Must match the multer per-request cap in server/src/routes/upload.ts. */
+const MAX_FILES_PER_UPLOAD = 20;
 
 export const MediaBin: React.FC = () => {
   const assets = useTimelineStore((s) => s.assets);
@@ -49,24 +54,39 @@ export const MediaBin: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   async function handleFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList);
+    if (files.length > MAX_FILES_PER_UPLOAD) {
+      setError(`Too many files: upload at most ${MAX_FILES_PER_UPLOAD} at a time.`);
+      return;
+    }
     setError(null);
     setUploading(true);
     try {
-      const uploaded = await uploadFiles(Array.from(fileList));
-      await Promise.all(
+      const uploaded = await uploadFiles(files);
+      // Probe each asset's natural duration ONCE here and cache it on the
+      // AssetItem — previously the probe result was discarded and the URL
+      // re-probed on every "Add" / drag-drop.
+      const withDurations = await Promise.all(
         uploaded.map(async (a) => {
-          if (a.kind === "video") await probeVideoDuration(a.url);
-          else if (a.kind === "audio") await probeAudioDuration(a.url);
+          let durationSec: number | undefined;
+          try {
+            if (a.kind === "video") durationSec = await probeVideoDuration(a.url);
+            else if (a.kind === "audio") durationSec = await probeAudioDuration(a.url);
+          } catch {
+            /* probe failure falls back to the 5s default later */
+          }
+          return { ...a, durationSec };
         }),
       );
       addAssets(
-        uploaded.map((u) => ({
+        withDurations.map((u) => ({
           id: u.id,
           name: u.name,
           url: u.url,
           kind: u.kind,
           filename: u.filename,
           size: u.size,
+          durationSec: u.durationSec,
         })),
       );
     } catch (e: any) {
@@ -91,27 +111,36 @@ export const MediaBin: React.FC = () => {
     }
   }
 
+  /**
+   * Resolve the trim window for a freshly added asset: use the duration
+   * cached at upload time when available; otherwise probe once; otherwise
+   * fall back to the 5s default.
+   */
+  async function resolveDuration(
+    asset: AssetItem,
+    probe: (url: string) => Promise<number>,
+  ): Promise<number> {
+    if (typeof asset.durationSec === "number" && asset.durationSec > 0) {
+      return asset.durationSec;
+    }
+    try {
+      return await probe(asset.url);
+    } catch {
+      return 5;
+    }
+  }
+
   async function onAppend(asset: AssetItem) {
     if (asset.kind === "audio") {
       const base = makeAudioClipFromAsset(asset);
-      try {
-        const dur = await probeAudioDuration(asset.url);
-        base.trim = { from: 0, to: dur };
-      } catch {
-        base.trim = { from: 0, to: 5 };
-      }
+      base.trim = { from: 0, to: await resolveDuration(asset, probeAudioDuration) };
       appendAudioClip(base);
       return;
     }
     // video or image -> TimelineClip
     const base = makeClipFromAsset(asset);
     if (asset.kind === "video") {
-      try {
-        const dur = await probeVideoDuration(asset.url);
-        base.trim = { from: 0, to: dur };
-      } catch {
-        base.trim = { from: 0, to: 5 };
-      }
+      base.trim = { from: 0, to: await resolveDuration(asset, probeVideoDuration) };
     } else {
       base.trim = { from: 0, to: 5 };
     }

@@ -24,6 +24,11 @@ build
 .env.*
 !.env.example
 
+# Local user media + rendered MP4s — never bake host uploads into images;
+# the runtime mounts real volumes for these.
+server/uploads
+server/renders
+
 # The Docker / CI config files themselves don't need to be COPYed into
 # runtime images.
 .dockerignore

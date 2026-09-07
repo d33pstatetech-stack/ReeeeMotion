@@ -23,9 +23,10 @@ const SHORTCUTS: Array<{ keys: string[]; desc: string; group: string }> = [
   { group: "Timeline", keys: ["Click ruler"], desc: "Jump the playhead. Drag to scrub through the timeline." },
   { group: "Timeline", keys: ["Tab"], desc: "Focus the timeline ruler for keyboard scrubbing." },
   { group: "Timeline", keys: ["←", "→"], desc: "On focused ruler: nudge playhead by 1 frame." },
-  { group: "Timeline", keys: ["Shift", "←/→"], desc: "On focused ruler: nudge playhead by 10 frames." },
+  { group: "Timeline", keys: ["Shift", "←/→"], desc: "On focused ruler: nudge playhead by 1 second." },
+  { group: "Timeline", keys: ["PageUp", "PageDown"], desc: "On focused ruler: nudge playhead by 10 frames." },
   { group: "Timeline", keys: ["Home", "End"], desc: "On focused ruler: jump playhead to start / end of timeline." },
-  { group: "Timeline", keys: ["Delete"], desc: "Remove selected clip" },
+  { group: "Timeline", keys: ["Delete"], desc: "Remove the selected video, audio, or text clip" },
   { group: "Timeline", keys: ["←", "→"], desc: "Nudge selected clip start by 0.1s" },
   { group: "Timeline", keys: ["Shift", "←/→"], desc: "Nudge selected clip start by 1s" },
   { group: "History", keys: ["Ctrl/⌘", "Z"], desc: "Undo the last edit (a slider drag = one undo step)" },
@@ -35,8 +36,6 @@ const SHORTCUTS: Array<{ keys: string[]; desc: string; group: string }> = [
   { group: "Editing", keys: ["+", "Text"], desc: "Click +Text in Timeline header to add a text overlay" },
   { group: "Share", keys: ["Share"], desc: "Copy a shareable URL of the current timeline to your clipboard" },
 ];
-
-const TIMELINE_ROW_PX = 332;
 
 export const App: React.FC = () => {
   // Mount global keyboard shortcuts once.

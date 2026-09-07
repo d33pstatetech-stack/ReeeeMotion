@@ -36,13 +36,18 @@ app.use(
 // Request life-cycle bounds ------------------------------------------------
 // Registered BEFORE express.json + multer so a wedged body-parser (e.g. a
 // 20 MB JSON upload stalling mid-stream) is also covered. Mutations
-// (POST/PUT/DELETE/PATCH) get a 30 s safety cap — a misbehaving multer
-// wedge, frozen Remotion worker, or a network-flaky bundle() call can
-// otherwise leave a request open until the client gives up, leaking fds
-// + memory. Renders + uploads get the full 15-min render budget. GETs
-// are intentionally NOT gated here: express.static manages long
-// range-fetch / scrubbing responses on its own; capping them at 30 s
-// would chop real-time video playback mid-byte.
+// (POST/PUT/DELETE/PATCH) get a 30 s wall-clock cap — a misbehaving multer
+// wedge or a network-flaky client can otherwise leave a request open
+// forever, leaking fds + memory. Renders + uploads get the full 15-min
+// render budget. GETs are intentionally NOT gated here: express.static
+// manages long range-fetch / scrubbing responses on its own; capping them
+// at 30 s would chop real-time video playback mid-byte.
+//
+// Implementation note: req.setTimeout() is a SOCKET-INACTIVITY timeout, not
+// a wall-clock cap (a steadily-dribbling request never fires it, and the
+// timer lingers on the keep-alive socket after the response finishes). We
+// therefore arm an explicit timer per mutating request and clear it on
+// finish/close, giving a true deadline.
 const TIMEOUT_DEFAULT_MS = 30 * 1000;
 const TIMEOUT_RENDER_MS = 15 * 60 * 1000;
 app.use((req, res, next) => {
@@ -54,21 +59,19 @@ app.use((req, res, next) => {
     req.path.startsWith("/api/render") || req.path.startsWith("/api/upload")
       ? TIMEOUT_RENDER_MS
       : TIMEOUT_DEFAULT_MS;
-  // Socket-level timeout via req.setTimeout. We don't ALSO call
-  // res.setTimeout here because both proxy to the same underlying TCP
-  // socket — one registration is enough to fire the on-timeout callback
-  // once when the request stalls.
-  req.setTimeout(ms, () => {
+  const timer = setTimeout(() => {
     // eslint-disable-next-line no-console
-    console.error(
-      `[server] request timeout ${ms}ms ${req.method} ${req.url}`,
-    );
+    console.error(`[server] request timeout ${ms}ms ${req.method} ${req.url}`);
     if (!res.headersSent) {
       res.status(503).json({ error: "request timeout" });
     } else {
       res.destroy();
     }
-  });
+  }, ms);
+  timer.unref(); // never keep the process alive just for this timer
+  const clearTimer = () => clearTimeout(timer);
+  res.on("finish", clearTimer);
+  res.on("close", clearTimer);
   next();
 });
 
@@ -103,6 +106,53 @@ app.use(
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, uploadDir: UPLOAD_DIR, renderDir: RENDER_DIR });
 });
+
+// ---------- Media TTL sweeper ---------------------------------------------
+// uploads/ and renders/ grow forever without this (every upload + every
+// export accumulates on disk). Policy: renders are disposable (24h), user
+// uploads are kept a week. Both are env-tunable; 0 disables that bucket.
+// Runs once at boot and then hourly. Files currently referenced by a saved
+// timeline are NOT special-cased — the client keeps its Media Bin entries
+// and surfaces a broken preview if the file is gone, and the user can
+// re-upload. For a local single-user editor this trade-off favors not
+// filling the disk silently.
+const RENDER_TTL_HOURS = Number(process.env.RENDER_TTL_HOURS ?? "24");
+const UPLOAD_TTL_HOURS = Number(process.env.UPLOAD_TTL_HOURS ?? "168"); // 1 week
+
+function sweepStaleFiles(dir: string, ttlHours: number) {
+  if (!Number.isFinite(ttlHours) || ttlHours <= 0) return;
+  const cutoff = Date.now() - ttlHours * 60 * 60 * 1000;
+  let removed = 0;
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const full = path.join(dir, entry.name);
+      try {
+        if (fs.statSync(full).mtimeMs < cutoff) {
+          fs.unlinkSync(full);
+          removed += 1;
+        }
+      } catch {
+        /* file vanished mid-sweep — fine */
+      }
+    }
+  } catch {
+    /* dir missing — fine */
+  }
+  if (removed > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[server] TTL sweep: removed ${removed} file(s) older than ${ttlHours}h from ${dir}`);
+  }
+}
+
+function runTtlSweep() {
+  sweepStaleFiles(RENDER_DIR, RENDER_TTL_HOURS);
+  sweepStaleFiles(UPLOAD_DIR, UPLOAD_TTL_HOURS);
+}
+runTtlSweep();
+const ttlTimer = setInterval(runTtlSweep, 60 * 60 * 1000);
+ttlTimer.unref();
+
 
 app.use("/api/upload", uploadRouter(UPLOAD_DIR));
 app.use("/api/render", renderRouter(RENDER_DIR));

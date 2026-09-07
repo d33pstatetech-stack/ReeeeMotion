@@ -74,11 +74,24 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Remove selected clip ----------------------------------------
+      // Remove selected clip (video/image, audio, or text — whichever of
+      // the three exclusive selections is currently active) -------------
       if (e.code === "Delete" || e.code === "Backspace") {
-        if (!store.selectedClipId) return;
+        if (
+          !store.selectedClipId &&
+          !store.selectedAudioClipId &&
+          !store.selectedTextClipId
+        ) {
+          return;
+        }
         e.preventDefault();
-        store.removeClip(store.selectedClipId);
+        if (store.selectedClipId) {
+          store.removeClip(store.selectedClipId);
+        } else if (store.selectedAudioClipId) {
+          store.removeAudioClip(store.selectedAudioClipId);
+        } else if (store.selectedTextClipId) {
+          store.removeTextClip(store.selectedTextClipId);
+        }
         return;
       }
 

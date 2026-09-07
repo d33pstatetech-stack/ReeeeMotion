@@ -1,8 +1,12 @@
 import { Router } from "express";
+import type express from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { nanoid } from "nanoid";
+
+/** Hard cap shared by the multer field limit and the error message. */
+const MAX_FILES_PER_REQUEST = 20;
 
 const ACCEPTED_MIME = new Set([
   "video/mp4",
@@ -99,8 +103,11 @@ export function uploadRouter(uploadDir: string) {
 
   const router = Router();
 
-  // Single-file upload endpoint. The client posts FormData('files[]', blob).
-  router.post("/", upload.array("files", 20), (req, res) => {
+  // Single-file upload endpoint. The client posts FormData('files', blob).
+  // Multer errors (too many files, oversized payload, bad mime) are caught
+  // by the error middleware below and surfaced as clean 400 JSON responses
+  // instead of an HTML stack trace.
+  router.post("/", upload.array("files", MAX_FILES_PER_REQUEST), (req, res) => {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     const host = process.env.PUBLIC_HOST ?? `http://localhost:${process.env.PORT ?? 3001}`;
     const payload = files.map((file) => {
@@ -113,10 +120,29 @@ export function uploadRouter(uploadDir: string) {
         mime: file.mimetype,
         kind,
         size: file.size,
-        pathOnDisk: path.join(uploadDir, file.filename),
       };
     });
     res.json({ assets: payload });
+  });
+
+  // Translate multer's rejection codes into explicit, user-facing messages.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  router.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (err && typeof err === "object" && "code" in err) {
+      const code = (err as { code?: string }).code;
+      if (code === "LIMIT_UNEXPECTED_FILE") {
+        return res.status(400).json({
+          error: `Too many files: upload at most ${MAX_FILES_PER_REQUEST} files per request.`,
+        });
+      }
+      if (code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          error: "File too large: the per-file limit is 500 MB.",
+        });
+      }
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(400).json({ error: message });
   });
 
   // DELETE /api/upload/:filename -> remove a previously uploaded media file.

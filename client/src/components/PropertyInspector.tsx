@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Settings2,
   Sparkles,
@@ -386,7 +386,13 @@ const TextClipForm: React.FC<TextClipFormProps> = ({ clip }) => {
   const setTextPosition = useTimelineStore((s) => s.setTextPosition);
   const setTextStart = useTimelineStore((s) => s.setTextStart);
   const setTextDuration = useTimelineStore((s) => s.setTextDuration);
-  const [font, setFont] = useState(clip.fontFamily);
+  // The select is always driven by the clip's actual fontFamily — no local
+  // state, so switching between text clips can never show a stale font.
+  // A project file may carry a fontFamily outside the presets; inject it
+  // as an extra option in that case so the <select> still shows truth.
+  const fontOptions = FONT_PRESETS.includes(clip.fontFamily)
+    ? FONT_PRESETS
+    : [clip.fontFamily, ...FONT_PRESETS];
 
   return (
     <div className="space-y-5 p-4 text-xs text-zinc-300">
@@ -411,14 +417,13 @@ const TextClipForm: React.FC<TextClipFormProps> = ({ clip }) => {
               Font family
             </div>
             <select
-              value={font}
+              value={clip.fontFamily}
               onChange={(e) => {
-                setFont(e.target.value);
                 setTextStyle(clip.id, { fontFamily: e.target.value });
               }}
               className="w-full rounded-md border border-white/10 bg-ink-800 px-2 py-1 text-xs text-zinc-100"
             >
-              {FONT_PRESETS.map((f) => (
+              {fontOptions.map((f) => (
                 <option key={f} value={f} className="bg-ink-800">
                   {f.split(",")[0]}
                 </option>

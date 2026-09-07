@@ -33,8 +33,9 @@ interface ClipProps {
  *
  * Cross-clip *transitions* are NOT handled here - they are layered on top of
  * this clip by `MainComposition` so we can support arbitrary `start` times
- * (real gaps on the timeline) AND keep the @remotion/transitions UX (fade,
- * wipe, slide-left/right, flip).
+ * (real gaps on the timeline) AND a hand-rolled transition set (fade, wipe,
+ * slide-left/right, flip) that mirrors the classic @remotion/transitions UX
+ * without the extra dependency.
  */
 export const Clip: React.FC<ClipProps> = ({ clip, fps, disableEntrance }) => {
   const frame = useCurrentFrame();

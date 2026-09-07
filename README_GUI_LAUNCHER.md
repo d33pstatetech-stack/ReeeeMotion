@@ -160,7 +160,7 @@ environment variables before `npm run electron:dist`:
 | `port 3001 is already in use` | Another `npm run dev` is running on the same port | Find it (Activity Monitor / Task Manager) and stop, or run `bash scripts/cleanup-ports.sh --sweep` |
 | `--own` logs `pid=N already dead -- skipped` | Previous launch crashed; its PIDs were recycled by the OS | Safe — the wrapper will continue to launch normally |
 | `--own` logs `manifest projectRoot mismatch` | Another project's dev.sh clobbered our manifest (rare) | Delete `.dev/launch-manifest.json` and re-launch |
-| `ERROR: setsid is not installed` | Container / minimal Linux without `util-linux` | `apt install util-linux` (Debian/Ubuntu) or `dnf install util-linux` (RHEL). Or `export ALLOW_NO_SETSID=1 && bash start.sh` to opt into a slow-but-safe PID-tree cleanup fallback |
+| `ERROR: setsid is not installed` | Container / minimal Linux without `util-linux` (**macOS never ships setsid — dev.sh auto-falls-back there**) | `apt install util-linux` (Debian/Ubuntu) or `dnf install util-linux` (RHEL). Or `export ALLOW_NO_SETSID=1 && bash start.sh` to opt into a slow-but-safe PID-tree cleanup fallback (set `ALLOW_NO_SETSID=0` to refuse it) |
 | Browser doesn't open | Headless / no desktop session | Open <http://localhost:5173/> manually — everything else still works |
 | Electron launcher: `Cannot find module 'electron'` | electron deps not installed | Run `npm install` first; electron + electron-builder are devDependencies |
 | Electron installer build fails on a non-native OS | electron-builder can't cross-compile binaries | Run `npm run electron:dist` on the OS that matches the target |

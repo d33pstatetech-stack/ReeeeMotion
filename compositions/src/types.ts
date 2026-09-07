@@ -199,3 +199,47 @@ export interface ProjectFile {
 
 export const PROJECT_FILE_KIND = "remotion-editor-project";
 export const PROJECT_FILE_VERSION = 1;
+
+// ---------- Timeline duration math (shared client + server) -------------
+//
+// Both the editor preview (client) and the export renderer (server) must
+// agree EXACTLY on how many frames the timeline spans, otherwise exports
+// get truncated relative to the preview. These helpers are the single
+// implementation; both sides import them. They intentionally use reduce()
+// instead of Math.max(...spread) so timelines with tens of thousands of
+// clips cannot blow the JS argument limit.
+
+/** Safe fps coercion: anything non-finite or <= 0 falls back to 30. */
+export function safeFps(fps: number): number {
+  return Number.isFinite(fps) && fps > 0 ? fps : 30;
+}
+
+/**
+ * The last second (from t=0) at which any clip is still on the timeline.
+ * Returns 0 for an empty timeline.
+ */
+export function timelineEndSeconds(timeline: TimelineState): number {
+  let max = 0;
+  for (const c of timeline.clips) {
+    const dur = c.trim.to - c.trim.from;
+    if (dur > 0) max = Math.max(max, c.start + dur);
+  }
+  for (const a of timeline.audioClips) {
+    const dur = a.trim.to - a.trim.from;
+    if (dur > 0) max = Math.max(max, a.start + dur);
+  }
+  for (const t of timeline.textClips) {
+    if (t.duration > 0) max = Math.max(max, t.start + t.duration);
+  }
+  return max;
+}
+
+/**
+ * Canonical timeline length in frames: `round(endSeconds * fps)`.
+ * Must match the Preview's `Math.round(totalSeconds * fps)` exactly —
+ * the server render uses this same function so exports are never
+ * truncated relative to the on-screen playhead.
+ */
+export function timelineEndFrames(timeline: TimelineState): number {
+  return Math.round(timelineEndSeconds(timeline) * safeFps(timeline.fps));
+}

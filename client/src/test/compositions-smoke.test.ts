@@ -37,6 +37,10 @@ import {
   DEFAULT_CLIP,
   DEFAULT_AUDIO_CLIP,
   DEFAULT_TEXT_CLIP,
+  safeFps,
+  timelineEndSeconds,
+  timelineEndFrames,
+  type TimelineState,
 } from "compositions/types";
 
 describe("compositions path alias (types-only smoke)", () => {
@@ -69,5 +73,55 @@ describe("compositions path alias (types-only smoke)", () => {
     expect(Array.isArray(s.clips)).toBe(true);
     expect(Array.isArray(s.audioClips)).toBe(true);
     expect(Array.isArray(s.textClips)).toBe(true);
+  });
+});
+
+describe("shared timeline duration math (preview == export)", () => {
+  const tl = (over: Partial<TimelineState>): TimelineState => ({
+    ...DEFAULT_TIMELINE,
+    ...over,
+  });
+
+  it("safeFps falls back to 30 for garbage fps", () => {
+    expect(safeFps(30)).toBe(30);
+    expect(safeFps(0)).toBe(30);
+    expect(safeFps(-5)).toBe(30);
+    expect(safeFps(NaN)).toBe(30);
+  });
+
+  it("timelineEndSeconds/ Frames: round(seconds*fps), NOT round(seconds)*fps", () => {
+    // A clip ending at 5.37s @30fps must be 161 frames (5.37*30=161.1),
+    // NOT 150 (round(5.37)=5 -> 5*30) — the old server bug truncated
+    // every export by up to half a second.
+    const t = tl({
+      clips: [
+        {
+          ...DEFAULT_CLIP(),
+          start: 0,
+          trim: { from: 0, to: 5.37 },
+        },
+      ],
+      audioClips: [],
+      textClips: [],
+    });
+    expect(timelineEndSeconds(t)).toBeCloseTo(5.37, 5);
+    expect(timelineEndFrames(t)).toBe(161);
+  });
+
+  it("picks the max end across all three layers", () => {
+    // DEFAULT_CLIP = 5s, DEFAULT_AUDIO_CLIP = 5s, DEFAULT_TEXT_CLIP = 3s;
+    // with these placements the audio layer ends last at 2 + 10 = 12s.
+    const t = tl({
+      clips: [{ ...DEFAULT_CLIP(), start: 0, trim: { from: 0, to: 3 } }],
+      audioClips: [{ ...DEFAULT_AUDIO_CLIP(), start: 2, trim: { from: 0, to: 10 } }],
+      textClips: [{ ...DEFAULT_TEXT_CLIP(), start: 4, duration: 3 }],
+    });
+    expect(timelineEndSeconds(t)).toBe(12);
+    expect(timelineEndFrames(t)).toBe(360);
+  });
+
+  it("empty timeline ends at 0", () => {
+    expect(timelineEndSeconds(DEFAULT_TIMELINE)).toBe(0);
+    expect(timelineEndFrames(DEFAULT_TIMELINE)).toBe(0);
   });
 });

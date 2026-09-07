@@ -55,6 +55,9 @@ esac
 mkdir -p "${SCRATCH}"
 
 # ---- Logging ---------------------------------------------------------------
+# Defined BEFORE anything can call them (the SMOKE_RENDER_BUDGET validation
+# below used to invoke fail() before its definition — "command not found"
+# under `set -u`, then execution fell through with the bad value).
 log() { printf '[smoke-export] %s\n' "$*" >&2; }
 fail() { log "FAIL $*"; exit 1; }
 
@@ -284,7 +287,15 @@ fs.writeFileSync(scratch + "/render-url.txt", r.url);
 console.error("[node] render URL: " + r.url);
 ' 2>"${SCRATCH}/render-url.log" || fail "render URL extraction failed (log: ${SCRATCH}/render-url.log)"
 RENDER_PATH="$(cat "${SCRATCH}/render-url.txt")"
-RENDER_URL="${SERVER_URL}${RENDER_PATH}"
+# The server returns ABSOLUTE URLs (`${PUBLIC_HOST}/renders/<id>.mp4`), but
+# the browser-facing poll target must be the same base we curl elsewhere.
+# Accept both shapes; previously the absolute form was blindly concatenated
+# onto SERVER_URL producing `http://localhost:3001http://localhost:3001/...`
+# and the poll loop spun on 000 forever.
+case "${RENDER_PATH}" in
+  http://*|https://*) RENDER_URL="${RENDER_PATH}" ;;
+  *)                  RENDER_URL="${SERVER_URL}${RENDER_PATH}" ;;
+esac
 poll_seconds=$((SMOKE_RENDER_BUDGET * 5))
 log "polling ${RENDER_URL} (≤${SMOKE_RENDER_BUDGET} iterations × 5s = ${poll_seconds}s)"
 
@@ -350,10 +361,16 @@ if [ "${DONE}" != "1" ]; then
   # file. If /api/health is 000 but /uploads/<that-file> is also 000, the
   # server is dead. If /api/health is 200 but /uploads is 000, the
   # whole-socket layer is wedged. If both are 200, the bug is renders-only.
-  UPLOADED_FILE_PATH="$(printf '%s' "${UP_RESP:-}" 2>/dev/null && cat "${UP_RESP}" 2>/dev/null | sed -nE 's/.*"url"[[:space:]]*:[[:space:]]*"\/([^"]+)".*/\1/p' || echo "")"
-  if [ -n "${UPLOADED_FILE_PATH}" ]; then
-    UPLOADS_PROBE="$(curl --max-time 2 -sS -o /dev/null -w '%{http_code}' "${SERVER_URL}/${UPLOADED_FILE_PATH}" 2>/dev/null || echo 000)"
-    echo "[uploads probe] GET /${UPLOADED_FILE_PATH}: -> status=${UPLOADS_PROBE}" >&2
+  # The upload response URL may be ABSOLUTE (PUBLIC_HOST) — probe whatever
+  # origin it points at directly rather than re-prefixing SERVER_URL.
+  UPLOADED_FILE_URL="$(printf '%s' "${UP_RESP:-}" 2>/dev/null && cat "${UP_RESP}" 2>/dev/null | sed -nE 's/.*"url"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' || echo "")"
+  if [ -n "${UPLOADED_FILE_URL}" ]; then
+    case "${UPLOADED_FILE_URL}" in
+      http://*|https://*) UPLOAD_PROBE_TARGET="${UPLOADED_FILE_URL}" ;;
+      *)                  UPLOAD_PROBE_TARGET="${SERVER_URL}/${UPLOADED_FILE_URL}" ;;
+    esac
+    UPLOADS_PROBE="$(curl --max-time 2 -sS -o /dev/null -w '%{http_code}' "${UPLOAD_PROBE_TARGET}" 2>/dev/null || echo 000)"
+    echo "[uploads probe] GET ${UPLOAD_PROBE_TARGET}: -> status=${UPLOADS_PROBE}" >&2
   fi
   # (3) On-disk state. Pull renderDir/uploadDir from the cached $HEALTH JSON
   #     rather than guessing paths — the server logs the truth verbatim.
