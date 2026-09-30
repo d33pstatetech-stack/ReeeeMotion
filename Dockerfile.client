@@ -14,6 +14,12 @@ COPY client/index.html ./
 COPY client/public ./public
 COPY client/src ./src
 
+# compositions/ sources are imported by client/src via the `compositions/*`
+# path alias (client/tsconfig.json -> ../compositions/src/*). They must exist
+# at ../compositions relative to /app/client for `tsc` to resolve them --
+# without this COPY the build fails with TS2307 "Cannot find module".
+COPY compositions ../compositions
+
 # Optional build-time override for the API origin baked into the SPA bundle.
 # Leave unset for same-origin (the nginx config proxies /api, /uploads and
 # /renders to the server service) — that's the supported setup.
