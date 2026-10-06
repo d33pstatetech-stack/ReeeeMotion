@@ -55,6 +55,7 @@ jobs:
           context: .
           file: Dockerfile.server
           push: false
+          load: true
           tags: remotion-editor-server:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -66,6 +67,7 @@ jobs:
           context: .
           file: Dockerfile.server
           push: false
+          load: true
           tags: remotion-editor-server:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -78,6 +80,7 @@ jobs:
           context: .
           file: Dockerfile.client
           push: false
+          load: true
           tags: remotion-editor-client:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -89,6 +92,7 @@ jobs:
           context: .
           file: Dockerfile.client
           push: false
+          load: true
           tags: remotion-editor-client:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
